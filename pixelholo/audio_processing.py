@@ -1,14 +1,16 @@
 """Audio and video processing helpers."""
 
+from pathlib import Path
 import logging
-import os
 import subprocess
 import wave
 
 import cv2
 
+from . import config
 
-def isolate_voice_from_audio(input_audio_path: str, output_audio_path: str) -> bool:
+
+def isolate_voice_from_audio(input_audio_path: Path | str, output_audio_path: Path | str) -> bool:
     """Extract and isolate voice from audio using audio-separator library."""
     try:
         from audio_separator.separator import Separator
@@ -17,19 +19,21 @@ def isolate_voice_from_audio(input_audio_path: str, output_audio_path: str) -> b
         separator = Separator(
             log_level=logging.WARNING,
             log_formatter=None,
-            model_file_dir="./models",
+            model_file_dir=str(config.MODELS_DIR),
         )
+        input_audio_path = str(input_audio_path)
+        output_audio_path = Path(output_audio_path)
         separator.separate(
             input_audio_path,
-            output_dir=os.path.dirname(output_audio_path),
+            output_dir=str(output_audio_path.parent),
             stem_name="vocals",
             output_format="wav",
             clean_work_dir=True,
         )
 
-        expected_output = os.path.join(os.path.dirname(output_audio_path), "vocals.wav")
-        if os.path.exists(expected_output):
-            os.rename(expected_output, output_audio_path)
+        expected_output = output_audio_path.parent / "vocals.wav"
+        if expected_output.exists():
+            expected_output.rename(output_audio_path)
             print(f"✅ Voice isolated successfully: {output_audio_path}")
             return True
         print("⚠️ Voice isolation did not produce the expected output file.")
@@ -39,7 +43,7 @@ def isolate_voice_from_audio(input_audio_path: str, output_audio_path: str) -> b
         return False
 
 
-def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
+def extract_audio_from_video(video_path: Path | str, output_audio_path: Path | str) -> bool:
     """Extract audio from video file using ffmpeg."""
     try:
         print("🎬 Extracting audio from video...")
@@ -47,7 +51,7 @@ def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
             "ffmpeg",
             "-y",
             "-i",
-            video_path,
+            str(video_path),
             "-vn",
             "-acodec",
             "pcm_s16le",
@@ -55,7 +59,7 @@ def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
             "22050",
             "-ac",
             "1",
-            output_audio_path,
+            str(output_audio_path),
         ]
         subprocess.run(cmd, capture_output=True, text=True, check=True)
         print(f"✅ Audio extracted successfully to: {output_audio_path}")
@@ -69,9 +73,9 @@ def extract_audio_from_video(video_path: str, output_audio_path: str) -> bool:
         return False
 
 
-def extract_first_frame(video_path: str, output_path: str) -> bool:
+def extract_first_frame(video_path: Path | str, output_path: Path | str) -> bool:
     """Extract the first frame from a video and save as image."""
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"Error: Could not open video file {video_path}")
         return False
@@ -80,15 +84,15 @@ def extract_first_frame(video_path: str, output_path: str) -> bool:
     cap.release()
 
     if ret:
-        cv2.imwrite(output_path, frame)
+        cv2.imwrite(str(output_path), frame)
         return True
     print("Error: Could not read first frame from video")
     return False
 
 
-def get_video_duration(video_path: str) -> float:
+def get_video_duration(video_path: Path | str) -> float:
     """Get the duration of a video in seconds."""
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return 0.0
 
@@ -99,10 +103,10 @@ def get_video_duration(video_path: str) -> float:
     return duration
 
 
-def get_audio_duration(audio_path: str) -> float:
+def get_audio_duration(audio_path: Path | str) -> float:
     """Get the duration of an audio file in seconds."""
     try:
-        with wave.open(audio_path, "rb") as audio_file:
+        with wave.open(str(audio_path), "rb") as audio_file:
             frames = audio_file.getnframes()
             sample_rate = audio_file.getframerate()
             return frames / sample_rate
@@ -117,7 +121,7 @@ def get_audio_duration(audio_path: str) -> float:
                     "format=duration",
                     "-of",
                     "csv=p=0",
-                    audio_path,
+                    str(audio_path),
                 ],
                 capture_output=True,
                 text=True,
@@ -127,7 +131,7 @@ def get_audio_duration(audio_path: str) -> float:
             return 0.0
 
 
-def loop_video_to_match_audio(video_path: str, audio_duration: float, output_path: str) -> bool:
+def loop_video_to_match_audio(video_path: Path | str, audio_duration: float, output_path: Path | str) -> bool:
     """Loop video to match audio duration."""
     video_duration = get_video_duration(video_path)
     if video_duration == 0:
@@ -140,12 +144,12 @@ def loop_video_to_match_audio(video_path: str, audio_duration: float, output_pat
         "-stream_loop",
         str(loop_count),
         "-i",
-        video_path,
+        str(video_path),
         "-t",
         str(audio_duration),
         "-c",
         "copy",
-        output_path,
+        str(output_path),
     ]
 
     try:

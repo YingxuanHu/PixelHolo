@@ -1,6 +1,5 @@
 """Flask web application components."""
 
-import os
 from datetime import date
 from pathlib import Path
 
@@ -14,8 +13,7 @@ from .config import (
     INPUT_VIDEO_DIR,
     ISOLATED_VOICE_PATH,
     MAX_CONTENT_LENGTH,
-    UPLOAD_FOLDER,
-    VOICE_SAMPLES_DIR,
+    UPLOADS_DIR,
 )
 from .state import AppState
 from .utils import setup_upload_directories
@@ -25,7 +23,7 @@ TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 def create_app(state: AppState) -> Flask:
     app = Flask(__name__, template_folder=str(TEMPLATES_DIR))
-    app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+    app.config["UPLOAD_FOLDER"] = str(UPLOADS_DIR)
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
     @app.route("/")
@@ -42,18 +40,18 @@ def create_app(state: AppState) -> Flask:
             return "Missing video file. Please upload a video.", 400
 
         filename = secure_filename(video_file.filename)
-        filepath = os.path.join(INPUT_VIDEO_DIR, filename)
-        video_file.save(filepath)
+        filepath = INPUT_VIDEO_DIR / filename
+        video_file.save(str(filepath))
         state.uploaded_input_video = filepath
 
-        extracted_audio_path = os.path.join(VOICE_SAMPLES_DIR, EXTRACTED_AUDIO_PATH)
+        extracted_audio_path = EXTRACTED_AUDIO_PATH
         if extract_audio_from_video(filepath, extracted_audio_path):
-            isolated_voice_path = os.path.join(VOICE_SAMPLES_DIR, ISOLATED_VOICE_PATH)
+            isolated_voice_path = ISOLATED_VOICE_PATH
             if isolate_voice_from_audio(extracted_audio_path, isolated_voice_path):
-                state.uploaded_voice_samples = [isolated_voice_path]
+                state.uploaded_voice_samples = [str(isolated_voice_path)]
                 print("✅ Voice extraction and isolation completed successfully!")
             else:
-                state.uploaded_voice_samples = [extracted_audio_path]
+                state.uploaded_voice_samples = [str(extracted_audio_path)]
                 print("⚠️ Voice isolation failed, using raw extracted audio")
         else:
             return "Failed to extract audio from video. Please ensure the video has an audio track.", 400

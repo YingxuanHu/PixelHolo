@@ -5,11 +5,15 @@ import sys
 import cv2
 import pygame
 
+from pathlib import Path
+
 from .config import DISPLAY_WINDOW_NAME, OUTPUT_WAV_PATH
 
 
-def play_video_and_revert(video_path: str, image_path: str) -> None:
+def play_video_and_revert(video_path: Path | str, image_path: Path | str) -> None:
     """Play a video with synchronized audio using pygame, then revert to an image."""
+    video_path = str(video_path)
+    image_path = str(image_path)
     print(f"Playing video with robust, clock-synced audio: {video_path}")
 
     cap = cv2.VideoCapture(video_path)
@@ -25,7 +29,7 @@ def play_video_and_revert(video_path: str, image_path: str) -> None:
     pygame.init()
     try:
         pygame.mixer.init()
-        pygame.mixer.music.load(OUTPUT_WAV_PATH)
+        pygame.mixer.music.load(str(OUTPUT_WAV_PATH))
         pygame.mixer.music.play()
     except Exception as exc:
         print(f"Error initializing Pygame or loading audio: {exc}. Video will play without sound.")

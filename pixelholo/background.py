@@ -1,5 +1,7 @@
 """Background removal utilities."""
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 from PIL import Image
@@ -7,8 +9,10 @@ from PIL import Image
 import torch
 
 
-def remove_background_advanced(image_path: str, output_path: str) -> bool:
+def remove_background_advanced(image_path: Path | str, output_path: Path | str) -> bool:
     """Advanced background removal focusing on preserving people's faces and bodies."""
+    image_path = str(image_path)
+    output_path = str(output_path)
     img = cv2.imread(image_path)
     if img is None:
         print(f"Could not load image: {image_path}")
@@ -32,7 +36,7 @@ def remove_background_advanced(image_path: str, output_path: str) -> bool:
     return True
 
 
-def try_mediapipe_segmentation(img, output_path: str) -> bool:
+def try_mediapipe_segmentation(img, output_path: Path | str) -> bool:
     """Use rembg with GPU acceleration for better background removal."""
     try:
         from rembg import remove, new_session
@@ -54,7 +58,7 @@ def try_mediapipe_segmentation(img, output_path: str) -> bool:
             result = result_array
 
         result = cv2.cvtColor(result.astype(np.uint8), cv2.COLOR_RGB2BGR)
-        cv2.imwrite(output_path, result)
+        cv2.imwrite(str(output_path), result)
         return True
     except Exception as exc:
         print(f"rembg segmentation failed: {exc}")
@@ -154,8 +158,10 @@ def refine_mask(mask, img):
     return mask
 
 
-def remove_background_from_video(input_video_path: str, output_video_path: str) -> bool:
+def remove_background_from_video(input_video_path: Path | str, output_video_path: Path | str) -> bool:
     """Remove background frame-by-frame using rembg."""
+    input_video_path = str(input_video_path)
+    output_video_path = str(output_video_path)
     cap = cv2.VideoCapture(input_video_path)
     if not cap.isOpened():
         print(f"Error: Could not open video file {input_video_path}")

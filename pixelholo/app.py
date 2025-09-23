@@ -1,6 +1,6 @@
 """Main application orchestration for PixelHolo."""
 
-import os
+from pathlib import Path
 import shutil
 import threading
 import time
@@ -28,10 +28,6 @@ from .ui import overlay_icon
 from .utils import setup_upload_directories
 from .web import create_app, run_flask_app
 
-INTERNET_ICON_PATH = "icons/internet.png"
-SPEECH_ICON_PATH = "icons/speech-synthesis.png"
-VIDEO_ICON_PATH = "icons/video-generation.png"
-
 
 def _wait_for_setup(state: AppState) -> None:
     print("Please open your web browser to http://127.0.0.1:5000 to upload files.")
@@ -39,14 +35,14 @@ def _wait_for_setup(state: AppState) -> None:
         time.sleep(1)
 
 
-def _prepare_video_assets(state: AppState) -> str:
+def _prepare_video_assets(state: AppState) -> Path:
     print("\n✅ Files uploaded! Initializing models...")
 
-    processed_video_path = os.path.join(config.INPUT_VIDEO_DIR, "processed_video.mp4")
-    video_to_use = state.uploaded_input_video
-
-    if not video_to_use:
+    processed_video_path = config.PROCESSED_VIDEO_PATH
+    if state.uploaded_input_video is None:
         raise RuntimeError("Input video missing after upload phase.")
+
+    video_to_use = Path(state.uploaded_input_video)
 
     print("🎬 Starting video background removal process...")
     if remove_background_from_video(video_to_use, processed_video_path):
@@ -59,11 +55,11 @@ def _prepare_video_assets(state: AppState) -> str:
 
 
 def _load_icons():
-    mic_icon = cv2.imread(config.MIC_ICON_PATH, cv2.IMREAD_UNCHANGED)
-    thinking_icon = cv2.imread(config.THINKING_ICON_PATH, cv2.IMREAD_UNCHANGED)
-    internet_icon = cv2.imread(INTERNET_ICON_PATH, cv2.IMREAD_UNCHANGED)
-    speech_icon = cv2.imread(SPEECH_ICON_PATH, cv2.IMREAD_UNCHANGED)
-    video_icon = cv2.imread(VIDEO_ICON_PATH, cv2.IMREAD_UNCHANGED)
+    mic_icon = cv2.imread(str(config.MIC_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    thinking_icon = cv2.imread(str(config.THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    internet_icon = cv2.imread(str(config.INTERNET_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    speech_icon = cv2.imread(str(config.SPEECH_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    video_icon = cv2.imread(str(config.VIDEO_ICON_PATH), cv2.IMREAD_UNCHANGED)
 
     icons = {
         "mic": mic_icon,
@@ -76,21 +72,21 @@ def _load_icons():
     for name, icon in icons.items():
         if icon is None:
             raise FileNotFoundError(
-                f"ERROR: Could not load {name} icon. Ensure the file exists in the 'icons' folder."
+                f"ERROR: Could not load {name} icon. Ensure the file exists in 'assets/icons'."
             )
 
     return icons
 
 
 def _initialize_models(video_device: str) -> LipSync:
-    os.makedirs("cache", exist_ok=True)
+    config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     print("🎬 Loading LipSync model...")
     lip = LipSync(
         model="wav2lip",
-        checkpoint_path="weights/wav2lip_gan.pth",
+        checkpoint_path=str(config.WEIGHTS_DIR / "wav2lip_gan.pth"),
         nosmooth=True,
         device=video_device,
-        cache_dir="cache",
+        cache_dir=str(config.CACHE_DIR),
         img_size=96,
         save_cache=True,
     )
@@ -102,7 +98,7 @@ def _initialize_models(video_device: str) -> LipSync:
     return lip
 
 
-def main() -> None:
+def main(enable_lipsync: bool = True) -> None:
     """Run the voice cloning and interactive session."""
     print("🚀 Starting the Interactive Voice Clone with Ollama! 🚀")
 
@@ -131,15 +127,14 @@ def main() -> None:
     print(f"🚀 Loading Chatterbox-TTS model on {device.upper()}...")
     tts = ChatterboxTTS.from_pretrained(device=device)
 
-    lip = _initialize_models(video_device)
+    lip = _initialize_models(video_device) if enable_lipsync else None
 
-    first_frame_path = "first_frame.jpg"
-    if not extract_first_frame(video_to_use, first_frame_path):
+    if not extract_first_frame(video_to_use, config.FIRST_FRAME_PATH):
         raise RuntimeError(f"Failed to extract first frame from {video_to_use}.")
 
-    base_img = cv2.imread(first_frame_path)
+    base_img = cv2.imread(str(config.FIRST_FRAME_PATH))
     if base_img is None:
-        raise RuntimeError(f"Failed to load photo from {first_frame_path}.")
+        raise RuntimeError(f"Failed to load photo from {config.FIRST_FRAME_PATH}.")
 
     icons = _load_icons()
 
@@ -199,42 +194,44 @@ def main() -> None:
                 cv2.waitKey(1)
 
                 print("Generating speech with TTS...")
-                wav = tts.generate(text_to_speak, audio_prompt_path=state.uploaded_voice_samples[0])
-                ta.save(config.OUTPUT_WAV_PATH, wav, tts.sr)
+                prompt_audio = Path(state.uploaded_voice_samples[0])
+                wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
+                ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
             except Exception as tts_error:
                 print(f"TTS error: {tts_error}")
-                wav = tts.generate(text_to_speak, audio_prompt_path=state.uploaded_voice_samples[0])
-                ta.save(config.OUTPUT_WAV_PATH, wav, tts.sr)
+                wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
+                ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
 
-            print("🎬 Generating lip-synced video...")
             img_with_video = overlay_icon(base_img, icons["video"])
             cv2.imshow(config.DISPLAY_WINDOW_NAME, img_with_video)
             cv2.waitKey(1)
 
-            synced_video_path = "synced_output.mp4"
-            try:
-                lip.sync(
-                    video_to_use,
-                    config.OUTPUT_WAV_PATH,
-                    synced_video_path,
-                )
-                print("✅ Lip-sync video generation completed.")
-                print("Playing lip-synced video...")
-                play_video_and_revert(synced_video_path, first_frame_path)
-            except Exception as sync_error:
-                print(f"❌ Lip-sync generation failed: {sync_error}")
-                print("Falling back to original video with generated audio...")
-                play_video_and_revert(video_to_use, first_frame_path)
+            if enable_lipsync and lip is not None:
+                try:
+                    lip.sync(
+                        str(video_to_use),
+                        str(config.OUTPUT_WAV_PATH),
+                        str(config.SYNCED_VIDEO_PATH),
+                    )
+                    print("✅ Lip-sync video generation completed.")
+                    print("Playing lip-synced video...")
+                    play_video_and_revert(config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
+                except Exception as sync_error:
+                    print(f"❌ Lip-sync generation failed: {sync_error}")
+                    print("Falling back to original video with generated audio...")
+                    play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
+            else:
+                print("Playing original video with generated audio...")
+                play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
 
     print("Cleaning up...")
     cleanup_tracking(tracking_state)
 
     cv2.destroyAllWindows()
 
-    if os.path.exists(config.UPLOAD_FOLDER):
-        print("Cleaning up temporary files...")
-        shutil.rmtree(config.UPLOAD_FOLDER)
-    if os.path.exists(config.TEMP_DIR):
-        shutil.rmtree(config.TEMP_DIR)
+    print("Cleaning up temporary files...")
+    for path in (config.UPLOADS_DIR, config.TEMP_DIR):
+        if path.exists():
+            shutil.rmtree(path)
 
     print("Program finished cleanly.")

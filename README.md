@@ -14,6 +14,24 @@ Overview
 - Displays unique icons to notify user which stage of processing the program is currently in.
 - Sends signals via PySerial to a 360 degree camera to enable face-tracking, so that the microphone attached on top is always pointed towards the user.
 
+Project layout
+---
+
+```
+PixelHolo/
+├── assets/                 # Static resources (icons, ML models, pretrained weights)
+├── docs/                   # Setup notes and other documentation fragments
+├── examples/               # Sample media assets for quick testing
+├── notes/                  # Dependency snapshots and scratch notes preserved from setup
+├── pixelholo/              # Application package (Flask UI, runtime orchestration, utilities)
+├── runtime/                # Generated artifacts (uploads, temp files, cached/processed media)
+├── scripts/                # Helper scripts for troubleshooting and experiments
+├── PixelHolo_Lipsync_and_Voice_Cloning.py      # Entry point with lip-sync enabled
+├── PixelHolo_Voice_Cloning_Only.py             # Entry point without lip-sync
+├── README.md
+└── requirements.txt
+```
+
 Info for running the program
 ----
 
@@ -58,5 +76,4 @@ Info regarding the two versions of PixelHolo
 Final Remarks
 ---
 Thank you for contributing to this important project! If you have any questions, feel free to us know.
-
 

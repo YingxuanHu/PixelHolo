@@ -227,7 +227,7 @@ def get_ollama_response(
 
     print("🧠 Getting response from Ollama...")
     if base_img is not None:
-        thinking_icon = cv2.imread(THINKING_ICON_PATH, cv2.IMREAD_UNCHANGED)
+        thinking_icon = cv2.imread(str(THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
         if thinking_icon is not None:
             img_with_thinking = overlay_icon(base_img, thinking_icon)
             cv2.imshow(DISPLAY_WINDOW_NAME, img_with_thinking)
