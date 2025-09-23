@@ -1,18 +1,21 @@
-# envs
-.venv*/
+# venvs
+.venv/
+.venv_*/
 venv/
 
-# large artifacts / outputs / caches
-cache/
+# large/local assets
+models/
 weights/
-models/*.onnx
-
-# media + serialized blobs
+cache/
 *.mp4
 *.mov
 *.wav
 *.pk
+*.onnx
 *.pth
+*.jpg
+*.png
 
-# mac/linux cruft
-.DS_Store
+# python caches
+__pycache__/
+*.pyc
