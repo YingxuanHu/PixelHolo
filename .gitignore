@@ -1,0 +1,7 @@
+
+.venv_*
+venv
+*.mp4
+*.mov
+*.wav
+
