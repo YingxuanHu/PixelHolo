@@ -1,7 +1,18 @@
+# envs
+.venv*/
+venv/
 
-.venv_*
-venv
+# large artifacts / outputs / caches
+cache/
+weights/
+models/*.onnx
+
+# media + serialized blobs
 *.mp4
 *.mov
 *.wav
+*.pk
+*.pth
 
+# mac/linux cruft
+.DS_Store
