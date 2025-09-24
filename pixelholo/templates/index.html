@@ -1,0 +1,479 @@
+
+        <!doctype html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Voice Clone Generator</title>
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }
+                
+                .container {
+                    background: rgba(255, 255, 255, 0.95);
+                    backdrop-filter: blur(10px);
+                    border-radius: 20px;
+                    padding: 40px;
+                    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+                    max-width: 650px;
+                    width: 100%;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                }
+                
+                h1 {
+                    color: #2d3748;
+                    font-size: 2.5rem;
+                    font-weight: 700;
+                    text-align: center;
+                    margin-bottom: 10px;
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                }
+                
+                .subtitle {
+                    text-align: center;
+                    color: #718096;
+                    font-size: 1.1rem;
+                    margin-bottom: 40px;
+                    font-weight: 400;
+                }
+                
+                .field-container {
+                    margin-bottom: 30px;
+                }
+                
+                .field-label {
+                    display: flex;
+                    align-items: center;
+                    font-weight: 600;
+                    color: #2d3748;
+                    margin-bottom: 12px;
+                    font-size: 1.1rem;
+                }
+                
+                .field-label i {
+                    margin-right: 10px;
+                    color: #667eea;
+                    width: 20px;
+                }
+                
+                .photo-options {
+                    display: flex;
+                    gap: 15px;
+                    margin-bottom: 15px;
+                }
+                
+                .photo-option-btn {
+                    flex: 1;
+                    padding: 12px 20px;
+                    background: linear-gradient(135deg, #f7fafc, #edf2f7);
+                    border: 2px solid #cbd5e0;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    text-align: center;
+                    font-weight: 600;
+                    color: #4a5568;
+                }
+                
+                .photo-option-btn:hover {
+                    background: linear-gradient(135deg, #edf2f7, #e2e8f0);
+                    border-color: #667eea;
+                    transform: translateY(-2px);
+                }
+                
+                .photo-option-btn.active {
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    border-color: #667eea;
+                }
+                
+                .photo-option-btn i {
+                    margin-right: 8px;
+                }
+                
+                .file-input-wrapper {
+                    position: relative;
+                    display: inline-block;
+                    width: 100%;
+                }
+                
+                .file-input {
+                    position: absolute;
+                    opacity: 0;
+                    width: 100%;
+                    height: 100%;
+                    cursor: pointer;
+                }
+                
+                .file-input-display {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: linear-gradient(135deg, #f7fafc, #edf2f7);
+                    border: 2px dashed #cbd5e0;
+                    border-radius: 12px;
+                    padding: 30px 20px;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
+                    text-align: center;
+                    min-height: 100px;
+                }
+                
+                .file-input-display:hover {
+                    background: linear-gradient(135deg, #edf2f7, #e2e8f0);
+                    border-color: #667eea;
+                    transform: translateY(-2px);
+                }
+                
+                .file-input-display i {
+                    font-size: 2rem;
+                    color: #667eea;
+                    margin-bottom: 10px;
+                }
+                
+                .file-input-text {
+                    color: #4a5568;
+                    font-weight: 500;
+                }
+                
+                .file-input-subtext {
+                    color: #718096;
+                    font-size: 0.9rem;
+                    margin-top: 5px;
+                }
+                
+                .camera-container {
+                    display: none;
+                    text-align: center;
+                    background: linear-gradient(135deg, #f7fafc, #edf2f7);
+                    border: 2px solid #cbd5e0;
+                    border-radius: 12px;
+                    padding: 20px;
+                    margin-bottom: 15px;
+                }
+                
+                .camera-container.active {
+                    display: block;
+                }
+                
+                #cameraVideo {
+                    width: 100%;
+                    max-width: 400px;
+                    height: 300px;
+                    background: #000;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                }
+                
+                #capturedPhoto {
+                    width: 100%;
+                    max-width: 400px;
+                    max-height: 300px;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                    display: none;
+                }
+                
+                .camera-controls {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: center;
+                    flex-wrap: wrap;
+                }
+                
+                .camera-btn {
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    transition: all 0.3s ease;
+                    font-size: 0.9rem;
+                }
+                
+                .camera-btn.primary {
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                }
+                
+                .camera-btn.secondary {
+                    background: #e2e8f0;
+                    color: #4a5568;
+                }
+                
+                .camera-btn:hover {
+                    transform: translateY(-2px);
+                }
+                
+                .camera-btn:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                    transform: none;
+                }
+                
+                textarea {
+                    width: 100%;
+                    min-height: 120px;
+                    padding: 20px;
+                    border: 2px solid #e2e8f0;
+                    border-radius: 12px;
+                    font-family: inherit;
+                    font-size: 1rem;
+                    resize: vertical;
+                    transition: all 0.3s ease;
+                    background: rgba(255, 255, 255, 0.8);
+                }
+                
+                textarea:focus {
+                    outline: none;
+                    border-color: #667eea;
+                    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+                    background: white;
+                }
+                
+                textarea::placeholder {
+                    color: #a0aec0;
+                    font-style: italic;
+                }
+                
+                .submit-btn {
+                    width: 100%;
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    padding: 18px 30px;
+                    border: none;
+                    border-radius: 12px;
+                    font-size: 1.2rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+                }
+                
+                .submit-btn:hover {
+                    transform: translateY(-3px);
+                    box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
+                }
+                
+                .submit-btn:active {
+                    transform: translateY(-1px);
+                }
+                
+                .submit-btn:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                    transform: none;
+                }
+                
+                .info-box {
+                    background: linear-gradient(135deg, #ebf8ff, #bee3f8);
+                    border-left: 4px solid #3182ce;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                    color: #2a69ac;
+                    font-size: 0.95rem;
+                    line-height: 1.6;
+                }
+                
+                .info-box i {
+                    margin-right: 8px;
+                    color: #3182ce;
+                }
+                
+                .hidden {
+                    display: none !important;
+                }
+                
+                @media (max-width: 768px) {
+                    .container {
+                        padding: 25px;
+                        margin: 10px;
+                    }
+                    
+                    h1 {
+                        font-size: 2rem;
+                    }
+                    
+                    .photo-options {
+                        flex-direction: column;
+                    }
+                    
+                    .file-input-display {
+                        padding: 20px 15px;
+                        min-height: 80px;
+                    }
+                    
+                    .file-input-display i {
+                        font-size: 1.5rem;
+                    }
+                    
+                    .camera-controls {
+                        flex-direction: column;
+                        align-items: center;
+                    }
+                    
+                    .camera-btn {
+                        width: 100%;
+                        max-width: 200px;
+                    }
+                }
+                
+                /* Animation for page load */
+                .container {
+                    animation: fadeInUp 0.8s ease-out;
+                }
+                
+                @keyframes fadeInUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(30px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                /* File input selected state */
+                .file-selected .file-input-display {
+                    background: linear-gradient(135deg, #e6fffa, #b2f5ea);
+                    border-color: #38b2ac;
+                    color: #234e52;
+                }
+                
+                .file-selected .file-input-display i {
+                    color: #38b2ac;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1><i class="fas fa-robot"></i> PixelHolo Cloner</h1>
+                <p class="subtitle">Create your personalized AI avatar with custom voice and personality</p>
+                
+                <div class="info-box">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Quick Start:</strong> Upload clear voice samples (WAV format) and provide a high-quality photo. 
+                    You can either upload an existing photo or take a new one with your camera!
+                </div>
+                
+                <form method="post" action="/upload_files" enctype="multipart/form-data" id="uploadForm">
+                    <div class="info-box">
+                        <i class="fas fa-magic"></i>
+                        <strong>AI Voice Extraction:</strong> The system will automatically extract and isolate your voice from the uploaded video using advanced audio processing techniques.
+                    </div>
+                    
+                    <!-- Video Section -->
+                    <div class="field-container">
+                        <label class="field-label">
+                            <i class="fas fa-video"></i>
+                            Your Video
+                        </label>
+                        
+                        <div class="file-input-wrapper" id="upload-option">
+                            <input type="file" name="input_video" accept="video/*" 
+                                class="file-input" onchange="handleFileSelect(this, 'video-display')">
+                            <div class="file-input-display" id="video-display">
+                                <div>
+                                    <i class="fas fa-video"></i>
+                                    <div class="file-input-text">Click to upload your video</div>
+                                    <div class="file-input-subtext">MP4, AVI, MOV, or other video formats</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="camera_photo" id="cameraPhotoData">
+                    </div>
+                    
+                    <div class="field-container">
+                        <label class="field-label">
+                            <i class="fas fa-brain"></i>
+                            Personality & Identity
+                        </label>
+                        <textarea name="system_prompt" 
+                                  placeholder="Describe who your clone should be... Are they a friendly teacher, a witty comedian, a wise mentor? Include name, personality traits, speaking style, interests, and any quirks that make them unique. The more detail you provide, the more authentic your clone will feel!"></textarea>
+                    </div>
+                    
+                    <input type="submit" value="🚀 Create My Clone" class="submit-btn" id="submitBtn">
+                </form>
+            </div>
+            
+            <script>
+                let stream = null;
+                let photoMode = 'upload'; // 'upload' or 'camera'
+                let capturedPhotoData = null;
+                
+                function handleFileSelect(input, displayId) {
+                    const display = document.getElementById(displayId);
+                    const files = input.files;
+                    
+                    if (files.length > 0) {
+                        display.classList.add('file-selected');
+                        
+                        // Force update the entire content
+                        const fileName = files.length === 1 ? files[0].name : `${files.length} files selected`;
+                        const fileMessage = files.length === 1 ? 'File selected successfully!' : 'Files selected successfully!';
+                        
+                        display.innerHTML = `
+                            <div>
+                                <i class="fas fa-check-circle"></i>
+                                <div class="file-input-text">${fileName}</div>
+                                <div class="file-input-subtext">${fileMessage}</div>
+                            </div>
+                        `;
+                    }
+                }
+                                  
+                function validateFileSize(input) {
+                    const maxSize = 1024 * 1024 * 1024; // 1 GB in bytes
+                    if (input.files && input.files[0] && input.files[0].size > maxSize) {
+                        alert('Video file is too large. Please upload a video smaller than 1 GB.');
+                        input.value = '';
+                        return false;
+                    }
+                    return true;
+                }                  
+                                  
+                function validateForm() {
+                    const videoInput = document.querySelector('input[name="input_video"]');
+                    if (!videoInput.files || videoInput.files.length === 0) {
+                        alert('Please upload a video file.');
+                        return false;
+                    }
+                    return true;
+                }                  
+                
+                
+                // Event listeners
+                document.addEventListener('DOMContentLoaded', function() {
+                    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+                        if (!validateForm()) {
+                            e.preventDefault();
+                        }
+                    });
+                });
+
+            </script>
+        </body>
+        </html>
+    

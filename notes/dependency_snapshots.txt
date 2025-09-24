@@ -1,4 +1,6 @@
-new:
+# Dependency Snapshots
+
+## Current environment
 absl-py==2.3.1
 attrs==25.3.0
 audio-separator==0.35.2
@@ -135,7 +137,7 @@ virtualenv==20.34.0
 Werkzeug==3.1.3
 zipp==3.23.0
 
-Old:
+## Previous environment
 absl-py==2.3.1
 attrs==25.3.0
 audio-separator==0.35.2
