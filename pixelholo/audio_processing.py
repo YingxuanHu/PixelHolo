@@ -20,22 +20,21 @@ def isolate_voice_from_audio(input_audio_path: Path | str, output_audio_path: Pa
             log_level=logging.WARNING,
             log_formatter=None,
             model_file_dir=str(config.MODELS_DIR),
-        )
-        input_audio_path = str(input_audio_path)
-        output_audio_path = Path(output_audio_path)
-        separator.separate(
-            input_audio_path,
-            output_dir=str(output_audio_path.parent),
-            stem_name="vocals",
-            output_format="wav",
-            clean_work_dir=True,
+            output_dir=str(Path(output_audio_path).parent),
+            output_format="WAV",
+            output_single_stem="vocals",
         )
 
-        expected_output = output_audio_path.parent / "vocals.wav"
-        if expected_output.exists():
-            expected_output.rename(output_audio_path)
-            print(f"✅ Voice isolated successfully: {output_audio_path}")
-            return True
+        separated_files = separator.separate(str(input_audio_path))
+
+        output_audio_path = Path(output_audio_path)
+        for file_path in separated_files:
+            candidate = Path(file_path)
+            if candidate.exists():
+                candidate.rename(output_audio_path)
+                print(f"✅ Voice isolated successfully: {output_audio_path}")
+                return True
+
         print("⚠️ Voice isolation did not produce the expected output file.")
         return False
     except Exception as exc:
