@@ -1,4 +1,4 @@
-"""AI interaction utilities including Ollama integration and internet search.""" 
+"""AI interaction utilities including Ollama integration and internet search."""
 
 import json
 import random
@@ -20,6 +20,7 @@ from .config import (
     OLLAMA_MODEL,
     THINKING_ICON_PATH,
 )
+from .timing import time_operation
 from .ui import overlay_icon
 
 
@@ -27,16 +28,16 @@ def remove_emojis(text: str) -> str:
     """Remove emojis and non-ASCII characters from text."""
     emoji_pattern = re.compile(
         "["  # noqa: W605
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\U0001F900-\U0001F9FF"
-        "\U0001FA70-\U0001FAFF"
-        "\U00002600-\U000026FF"
-        "\U00002700-\U000027BF"
+        "\U0001f600-\U0001f64f"
+        "\U0001f300-\U0001f5ff"
+        "\U0001f680-\U0001f6ff"
+        "\U0001f1e0-\U0001f1ff"
+        "\U00002702-\U000027b0"
+        "\U000024c2-\U0001f251"
+        "\U0001f900-\U0001f9ff"
+        "\U0001fa70-\U0001faff"
+        "\U00002600-\U000026ff"
+        "\U00002700-\U000027bf"
         "]+",
         flags=re.UNICODE,
     )
@@ -145,58 +146,59 @@ def needs_internet_ml(query: str) -> bool:
 
 def web_search(query: str, max_results: int = 4) -> str:
     """Perform a Bing search and format the results."""
-    try:
-        time.sleep(random.uniform(1, 2))
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-        }
-        encoded_query = urllib.parse.quote_plus(query)
-        url = f"https://www.bing.com/search?q={encoded_query}"
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
+    with time_operation("web_search", query_length=len(query), max_results=max_results):
+        try:
+            time.sleep(random.uniform(1, 2))
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+                "Accept-Encoding": "gzip, deflate",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+            }
+            encoded_query = urllib.parse.quote_plus(query)
+            url = f"https://www.bing.com/search?q={encoded_query}"
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, "html.parser")
-        snippets = []
-        results_found = 0
+            soup = BeautifulSoup(response.content, "html.parser")
+            snippets = []
+            results_found = 0
 
-        for result in soup.find_all("li", class_="b_algo"):
-            if results_found >= max_results:
-                break
-            title_elem = result.find("h2")
-            if title_elem:
-                title_link = title_elem.find("a")
-                if title_link:
-                    title = title_link.get_text(strip=True)
-                    href = title_link.get("href", "")
+            for result in soup.find_all("li", class_="b_algo"):
+                if results_found >= max_results:
+                    break
+                title_elem = result.find("h2")
+                if title_elem:
+                    title_link = title_elem.find("a")
+                    if title_link:
+                        title = title_link.get_text(strip=True)
+                        href = title_link.get("href", "")
+                    else:
+                        title = title_elem.get_text(strip=True)
+                        href = ""
                 else:
-                    title = title_elem.get_text(strip=True)
+                    title = ""
                     href = ""
-            else:
-                title = ""
-                href = ""
 
-            body_elem = result.find("div", class_="b_caption")
-            if body_elem:
-                for unwanted in body_elem.find_all(["strong", "em"]):
-                    unwanted.unwrap()
-                body = body_elem.get_text(strip=True)
-            else:
-                body = ""
+                body_elem = result.find("div", class_="b_caption")
+                if body_elem:
+                    for unwanted in body_elem.find_all(["strong", "em"]):
+                        unwanted.unwrap()
+                    body = body_elem.get_text(strip=True)
+                else:
+                    body = ""
 
-            if title and body:
-                snippets.append(f"{title}\n{body}\n{href}\n")
-                results_found += 1
+                if title and body:
+                    snippets.append(f"{title}\n{body}\n{href}\n")
+                    results_found += 1
 
-        return "\n".join(snippets) if snippets else "No results found."
-    except requests.exceptions.RequestException as exc:
-        return f"Request failed: {exc}"
-    except Exception as exc:
-        return f"Search failed: {exc}"
+            return "\n".join(snippets) if snippets else "No results found."
+        except requests.exceptions.RequestException as exc:
+            return f"Request failed: {exc}"
+        except Exception as exc:
+            return f"Search failed: {exc}"
 
 
 def get_ollama_response(
@@ -254,23 +256,26 @@ def get_ollama_response(
     }
     headers = {"Content-Type": "application/json"}
 
-    try:
-        response = requests.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
-        response_data = response.json()
+    with time_operation("ollama_api_call", prompt_length=len(full_prompt)):
+        try:
+            response = requests.post(
+                OLLAMA_API_URL, json=payload, headers=headers, timeout=60
+            )
+            response.raise_for_status()
+            response_data = response.json()
 
-        if "response" in response_data:
-            ai_response = response_data["response"].strip()
-            return remove_emojis(ai_response)
-        print("Unexpected response format from Ollama")
-        return "I seem to be having trouble thinking right now."
-    except requests.exceptions.RequestException as exc:
-        print(f"Error connecting to Ollama API: {exc}")
-        print("Please ensure Ollama is running on port 11434 with a model loaded.")
-        return "I seem to be having trouble thinking right now."
-    except json.JSONDecodeError as exc:
-        print(f"Error parsing JSON response: {exc}")
-        return "I seem to be having trouble thinking right now."
-    except Exception as exc:
-        print(f"Unexpected error: {exc}")
-        return "I seem to be having trouble thinking right now."
+            if "response" in response_data:
+                ai_response = response_data["response"].strip()
+                return remove_emojis(ai_response)
+            print("Unexpected response format from Ollama")
+            return "I seem to be having trouble thinking right now."
+        except requests.exceptions.RequestException as exc:
+            print(f"Error connecting to Ollama API: {exc}")
+            print("Please ensure Ollama is running on port 11434 with a model loaded.")
+            return "I seem to be having trouble thinking right now."
+        except json.JSONDecodeError as exc:
+            print(f"Error parsing JSON response: {exc}")
+            return "I seem to be having trouble thinking right now."
+        except Exception as exc:
+            print(f"Unexpected error: {exc}")
+            return "I seem to be having trouble thinking right now."

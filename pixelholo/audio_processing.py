@@ -8,69 +8,76 @@ import wave
 import cv2
 
 from . import config
+from .timing import time_operation
 
 
-def isolate_voice_from_audio(input_audio_path: Path | str, output_audio_path: Path | str) -> bool:
+def isolate_voice_from_audio(
+    input_audio_path: Path | str, output_audio_path: Path | str
+) -> bool:
     """Extract and isolate voice from audio using audio-separator library."""
-    try:
-        from audio_separator.separator import Separator
+    with time_operation("voice_isolation", input_path=str(input_audio_path)):
+        try:
+            from audio_separator.separator import Separator
 
-        print("🎵 Isolating voice from audio using AI...")
-        separator = Separator(
-            log_level=logging.WARNING,
-            log_formatter=None,
-            model_file_dir=str(config.MODELS_DIR),
-        )
-        input_audio_path = str(input_audio_path)
-        output_audio_path = Path(output_audio_path)
-        separator.separate(
-            input_audio_path,
-            output_dir=str(output_audio_path.parent),
-            stem_name="vocals",
-            output_format="wav",
-            clean_work_dir=True,
-        )
+            print("🎵 Isolating voice from audio using AI...")
+            separator = Separator(
+                log_level=logging.WARNING,
+                log_formatter=None,
+                model_file_dir=str(config.MODELS_DIR),
+            )
+            input_audio_path = str(input_audio_path)
+            output_audio_path = Path(output_audio_path)
+            separator.separate(
+                input_audio_path,
+                output_dir=str(output_audio_path.parent),
+                stem_name="vocals",
+                output_format="wav",
+                clean_work_dir=True,
+            )
 
-        expected_output = output_audio_path.parent / "vocals.wav"
-        if expected_output.exists():
-            expected_output.rename(output_audio_path)
-            print(f"✅ Voice isolated successfully: {output_audio_path}")
-            return True
-        print("⚠️ Voice isolation did not produce the expected output file.")
-        return False
-    except Exception as exc:
-        print(f"❌ Voice isolation failed: {exc}")
-        return False
+            expected_output = output_audio_path.parent / "vocals.wav"
+            if expected_output.exists():
+                expected_output.rename(output_audio_path)
+                print(f"✅ Voice isolated successfully: {output_audio_path}")
+                return True
+            print("⚠️ Voice isolation did not produce the expected output file.")
+            return False
+        except Exception as exc:
+            print(f"❌ Voice isolation failed: {exc}")
+            return False
 
 
-def extract_audio_from_video(video_path: Path | str, output_audio_path: Path | str) -> bool:
+def extract_audio_from_video(
+    video_path: Path | str, output_audio_path: Path | str
+) -> bool:
     """Extract audio from video file using ffmpeg."""
-    try:
-        print("🎬 Extracting audio from video...")
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(video_path),
-            "-vn",
-            "-acodec",
-            "pcm_s16le",
-            "-ar",
-            "22050",
-            "-ac",
-            "1",
-            str(output_audio_path),
-        ]
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
-        print(f"✅ Audio extracted successfully to: {output_audio_path}")
-        return True
-    except subprocess.CalledProcessError as exc:
-        print(f"❌ Audio extraction failed: {exc}")
-        print("Make sure ffmpeg is installed and accessible from command line")
-        return False
-    except Exception as exc:
-        print(f"❌ Unexpected error during audio extraction: {exc}")
-        return False
+    with time_operation("audio_extraction", video_path=str(video_path)):
+        try:
+            print("🎬 Extracting audio from video...")
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_path),
+                "-vn",
+                "-acodec",
+                "pcm_s16le",
+                "-ar",
+                "22050",
+                "-ac",
+                "1",
+                str(output_audio_path),
+            ]
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            print(f"✅ Audio extracted successfully to: {output_audio_path}")
+            return True
+        except subprocess.CalledProcessError as exc:
+            print(f"❌ Audio extraction failed: {exc}")
+            print("Make sure ffmpeg is installed and accessible from command line")
+            return False
+        except Exception as exc:
+            print(f"❌ Unexpected error during audio extraction: {exc}")
+            return False
 
 
 def extract_first_frame(video_path: Path | str, output_path: Path | str) -> bool:
@@ -131,7 +138,9 @@ def get_audio_duration(audio_path: Path | str) -> float:
             return 0.0
 
 
-def loop_video_to_match_audio(video_path: Path | str, audio_duration: float, output_path: Path | str) -> bool:
+def loop_video_to_match_audio(
+    video_path: Path | str, audio_duration: float, output_path: Path | str
+) -> bool:
     """Loop video to match audio duration."""
     video_duration = get_video_duration(video_path)
     if video_duration == 0:
