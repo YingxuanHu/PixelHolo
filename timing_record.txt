@@ -1,0 +1,25 @@
+⏱️  TIMING: audio_extraction
+   Duration: 0.107s
+   Memory: 620.5MB → 620.5MB
+   Metadata: {'video_path': '/home/maggie/PixelHolo/runtime/uploads/video/Movie_on_2025-10-08_at_9.56_AM.mov'}
+
+⏱️  TIMING: voice_isolation
+   Duration: 0.056s
+   Memory: 620.5MB → 634.9MB
+   Metadata: {'input_path': '/home/maggie/PixelHolo/runtime/uploads/voice_samples/extracted_audio.wav'}
+
+⏱️  TIMING: background_removal
+   Duration: 107.029s
+   Memory: 634.9MB → 1046.7MB
+   Metadata: {'video_path': '/home/maggie/PixelHolo/runtime/uploads/video/Movie_on_2025-10-08_at_9.56_AM.mov'}
+
+⏱️  TIMING: tts_model_loading
+   Duration: 104.961s
+   Memory: 1046.7MB → 4236.7MB
+   Metadata: {'device': 'cpu'}
+
+⏱️  TIMING: lipsync_model_loading
+   Duration: 0.000s
+   Memory: 4236.7MB → 4236.7MB
+   Metadata: {'device': 'cpu'}
+
