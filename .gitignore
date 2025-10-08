@@ -9,6 +9,7 @@ weights/
 cache/
 *.mp4
 *.mov
+*.MOV
 *.wav
 *.pk
 *.onnx
