@@ -274,3 +274,48 @@ def get_ollama_response(
     except Exception as exc:
         print(f"Unexpected error: {exc}")
         return "I seem to be having trouble thinking right now."
+
+
+def ensure_ollama_running(wait_seconds: int = 12) -> bool:
+    """Best-effort: ensure Ollama API is up; try to start if down.
+
+    - Checks `OLLAMA_API_URL` /api/version
+    - If unreachable, spawns `ollama serve` in the background
+    - Waits up to `wait_seconds` for readiness.
+    Returns True if healthy, else False.
+    """
+    version_url = OLLAMA_API_URL.rstrip("/") + "/version"
+    try:
+        r = requests.get(version_url, timeout=2)
+        if r.ok:
+            return True
+    except Exception:
+        pass
+
+    # Try to start ollama serve
+    try:
+        import subprocess, os
+        # Start detached so it keeps running; silence output
+        kwargs = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "stdin": subprocess.DEVNULL,
+            "start_new_session": True,
+            "env": os.environ.copy(),
+        }
+        subprocess.Popen(["ollama", "serve"], **kwargs)
+    except Exception as exc:
+        print(f"Could not start Ollama automatically: {exc}")
+        return False
+
+    # Wait for readiness
+    deadline = time.time() + max(0, wait_seconds)
+    while time.time() < deadline:
+        try:
+            r = requests.get(version_url, timeout=1.5)
+            if r.ok:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False

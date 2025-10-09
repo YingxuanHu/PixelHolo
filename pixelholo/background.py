@@ -158,8 +158,23 @@ def refine_mask(mask, img):
     return mask
 
 
-def remove_background_from_video(input_video_path: Path | str, output_video_path: Path | str) -> bool:
-    """Remove background frame-by-frame using rembg."""
+def remove_background_from_video(
+    input_video_path: Path | str,
+    output_video_path: Path | str,
+    *,
+    process_every: int = 1,
+    ema: float = 0.7,
+    mask_downscale_max: int = 768,
+    model_name: str | None = None,
+) -> bool:
+    """Remove background frame-by-frame using rembg.
+
+    Parameters
+    - process_every: run the segmenter every N frames; reuse last mask between.
+    - ema: exponential moving average factor for temporal mask smoothing (0..1).
+    - mask_downscale_max: compute masks on downscaled frames for speed, then upsample.
+    - model_name: override rembg model (e.g., "u2netp", "isnet-general-use").
+    """
     input_video_path = str(input_video_path)
     output_video_path = str(output_video_path)
     cap = cv2.VideoCapture(input_video_path)
@@ -179,12 +194,15 @@ def remove_background_from_video(input_video_path: Path | str, output_video_path
     try:
         from rembg import remove, new_session
 
-        if torch.cuda.is_available():
-            session = new_session("u2net", providers=["CUDAExecutionProvider"])
-            print("Using GPU acceleration for background removal")
-        else:
-            session = new_session("u2net")
-            print("Using CPU for background removal")
+        use_cuda = torch.cuda.is_available()
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if use_cuda else None
+        chosen_model = model_name or ("isnet-general-use" if use_cuda else "u2netp")
+
+        session = new_session(chosen_model, providers=providers) if providers else new_session(chosen_model)
+        print("Using GPU acceleration for background removal" if use_cuda else "Using CPU for background removal")
+        print(f"rembg model: {chosen_model}; process_every={process_every}, ema={ema}, downscale_max={mask_downscale_max}")
+
+        last_mask = None  # float32 [H,W] in [0,1]
 
         while True:
             ret, frame = cap.read()
@@ -195,17 +213,54 @@ def remove_background_from_video(input_video_path: Path | str, output_video_path
             if frame_count % 30 == 0:
                 print(f"Processing frame {frame_count}/{total_frames}")
 
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_frame = Image.fromarray(rgb_frame)
-            output_pil = remove(pil_frame, session=session)
-            result_array = np.array(output_pil)
+            need_infer = (process_every <= 1) or (frame_count % process_every == 1) or (last_mask is None)
 
-            if result_array.shape[2] == 4:
-                alpha = result_array[:, :, 3] / 255.0
-                result_frame = result_array[:, :, :3] * alpha[:, :, np.newaxis]
-                result_frame = cv2.cvtColor(result_frame.astype(np.uint8), cv2.COLOR_RGB2BGR)
+            if need_infer:
+                h, w = frame.shape[:2]
+                # Compute a smaller frame for mask to speed up inference
+                scale = 1.0
+                if mask_downscale_max > 0:
+                    max_dim = max(h, w)
+                    if max_dim > mask_downscale_max:
+                        scale = mask_downscale_max / float(max_dim)
+                if scale < 1.0:
+                    small_frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                else:
+                    small_frame = frame
+
+                rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                pil_small = Image.fromarray(rgb_small)
+                output_pil = remove(pil_small, session=session)
+                out_np = np.array(output_pil)
+
+                if out_np.ndim == 3 and out_np.shape[2] == 4:
+                    alpha_small = out_np[:, :, 3].astype(np.float32) / 255.0
+                else:
+                    # If model returns RGB only, assume full foreground (rare for rembg)
+                    alpha_small = np.ones(out_np.shape[:2], dtype=np.float32)
+
+                # Upsample mask back to original resolution if needed
+                if alpha_small.shape[0] != h or alpha_small.shape[1] != w:
+                    alpha = cv2.resize(alpha_small, (w, h), interpolation=cv2.INTER_CUBIC)
+                else:
+                    alpha = alpha_small
+
+                # Temporal EMA smoothing to reduce flicker
+                if last_mask is None:
+                    smoothed = alpha
+                else:
+                    smoothed = (ema * alpha + (1.0 - ema) * last_mask)
+
+                # Optional light edge refinement for consistency
+                smoothed = np.clip(smoothed, 0.0, 1.0)
+
+                last_mask = smoothed
+                current_mask = smoothed
             else:
-                result_frame = cv2.cvtColor(result_array, cv2.COLOR_RGB2BGR)
+                current_mask = last_mask
+
+            # Apply mask to current full-res frame
+            result_frame = (frame.astype(np.float32) * current_mask[:, :, None]).astype(np.uint8)
 
             out.write(result_frame)
     except Exception as exc:

@@ -1,5 +1,6 @@
 """Configuration constants for the PixelHolo application."""
 
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -55,8 +56,27 @@ DISPLAY_WINDOW_NAME = "PixelHolo Clone"
 
 MAX_CONTENT_LENGTH = 1024 * 1024 * 1024  # 1 GB
 
+# Web interface configuration (overridable via ENV)
+FLASK_HOST = os.environ.get("PIXELHOLO_FLASK_HOST", "127.0.0.1")
+FLASK_PORT = int(os.environ.get("PIXELHOLO_FLASK_PORT", "5000"))
+_fallback_env = os.environ.get("PIXELHOLO_FLASK_PORT_FALLBACKS")
+if _fallback_env:
+    FLASK_PORT_FALLBACKS = tuple(
+        int(value.strip())
+        for value in _fallback_env.split(",")
+        if value.strip().isdigit()
+    )
+else:
+    FLASK_PORT_FALLBACKS = (5001, 5002, 5003)
+
 # Serial configuration
 POSSIBLE_PORTS = ["/dev/ttyUSB0"]
 BAUD = 9600
 PAN_SPEED = 0x18
 TILT_SPEED = 0x18
+
+# Background removal tuning
+BG_PROCESS_EVERY = 3  # run segmenter every N frames (>=1)
+BG_MASK_EMA = 0.7     # temporal smoothing for masks (0..1)
+BG_DOWNSCALE_MAX = 768  # compute masks at <= this max dimension
+BG_MODEL_NAME = None    # e.g., "isnet-general-use", "u2netp"; None=auto
