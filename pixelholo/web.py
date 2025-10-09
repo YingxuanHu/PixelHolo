@@ -1,5 +1,7 @@
 """Flask web application components."""
 
+import errno
+import socket
 from datetime import date
 from pathlib import Path
 
@@ -10,6 +12,9 @@ from .audio_processing import extract_audio_from_video, isolate_voice_from_audio
 from .config import (
     BASE_SYSTEM_PROMPT,
     EXTRACTED_AUDIO_PATH,
+    FLASK_HOST,
+    FLASK_PORT,
+    FLASK_PORT_FALLBACKS,
     INPUT_VIDEO_DIR,
     ISOLATED_VOICE_PATH,
     MAX_CONTENT_LENGTH,
@@ -74,5 +79,34 @@ def create_app(state: AppState) -> Flask:
 
 
 def run_flask_app(app: Flask) -> None:
-    print("Starting web interface on http://127.0.0.1:5000")
-    app.run(debug=False, use_reloader=False)
+    host = FLASK_HOST
+    primary = FLASK_PORT
+    candidates = [primary]
+    for candidate in FLASK_PORT_FALLBACKS:
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    def _can_bind(port: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+    for port in candidates:
+        if not _can_bind(port):
+            print(f"⚠️ Port {port} is in use. Trying next available port...")
+            continue
+        try:
+            print(f"Starting web interface on http://{host}:{port}")
+            app.run(host=host, port=port, debug=False, use_reloader=False)
+            return
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                print(f"⚠️ Port {port} became busy. Trying next available port...")
+                continue
+            raise
+
+    print("❌ Unable to start the web interface; all configured ports are busy.")

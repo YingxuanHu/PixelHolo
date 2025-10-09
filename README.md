@@ -42,6 +42,7 @@ Info for running the program
 - Prior to running PixelHolo, enter the Python virtual environment created for this project (by running 'source venv/bin/activate' in the terminal while in the same directory as this file).
 
 - When the program starts, a link to a locally hosted web interface will be provided, through which the user will upload a video of a person talking to the camera for at least a minute. The user can optionally also provide text instructions to fine-tune the Ollama AI model that will be used for conversation (Phi-4 is currently being used, but you can of course change this if you wish).
+- The uploader UI listens on `http://127.0.0.1:5000` by default. If that port is busy, PixelHolo automatically tries the fallbacks `5001-5003`. To override these values, set `PIXELHOLO_FLASK_HOST`, `PIXELHOLO_FLASK_PORT`, and (optional) `PIXELHOLO_FLASK_PORT_FALLBACKS` before launching the script.
 
 - After clicking the 'Generate' button, you can head back to the terminal to check the initialization process.
 
@@ -149,25 +150,28 @@ Ensure the latest NVIDIA driver is installed (`nvidia-smi` should succeed) befor
    ```
    *(Only run this after completing Steps 3–4 so the CUDA 12.8 nightly `torch/torchaudio/torchvision` and patched Chatterbox metadata are already in place. If `pip` complains that `torch>=2.10.0.dev...` is missing, repeat Step 3 to reinstall the nightly build.)*
 
-Ollama Service Reminder
+Ollama Service
 ---
-PixelHolo expects an Ollama instance listening on `http://127.0.0.1:11434`. Before launching the app:
+PixelHolo talks to Ollama at `http://127.0.0.1:11434`.
 
-```bash
-# verify / start Ollama
-systemctl --user status ollama 2>/dev/null || systemctl status ollama
-ollama serve &  # or: systemctl --user start ollama
+- Auto-start: the app will try to start Ollama for you if it isn’t running.
+- Manual fallback (if auto-start fails or you prefer a service):
+  ```bash
+  # start the server
+  ollama serve    # or: systemctl --user start ollama
 
-# pull & warm a model
-ollama pull llama3.1
-ollama run llama3.1 "hello"
+  # pull & warm a model
+  ollama pull llama3.1
+  ollama run llama3.1 "hello"
 
-# quick health checks
-ss -lntp | grep 11434
-curl http://127.0.0.1:11434/api/version
-```
+  # health check
+  curl http://127.0.0.1:11434/api/version
+  ```
 
-If you run Ollama on a different host or port, update the PixelHolo configuration accordingly (e.g., `OLLAMA_API_BASE`).
+Troubleshooting
+- Ensure `ollama` is on PATH: `which ollama || echo "Ollama not on PATH"`
+- If running as a managed service, use your system’s service manager instead of `ollama serve`.
+- To point PixelHolo at a non-default host/port, edit `pixelholo/config.py` (`OLLAMA_API_URL`).
 
 Final Remarks
 ---

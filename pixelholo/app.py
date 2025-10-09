@@ -13,7 +13,7 @@ from chatterbox.tts import ChatterboxTTS
 from lipsync import LipSync
 
 from . import config
-from .ai import get_ollama_response
+from .ai import get_ollama_response, ensure_ollama_running
 from .audio_processing import extract_first_frame
 from .background import remove_background_from_video
 from .playback import play_video_and_revert
@@ -56,7 +56,14 @@ def _prepare_video_assets(state: AppState) -> Path:
     video_to_use = Path(state.uploaded_input_video)
 
     print("🎬 Starting video background removal process...")
-    if remove_background_from_video(video_to_use, processed_video_path):
+    if remove_background_from_video(
+        video_to_use,
+        processed_video_path,
+        process_every=getattr(config, "BG_PROCESS_EVERY", 1),
+        ema=getattr(config, "BG_MASK_EMA", 0.7),
+        mask_downscale_max=getattr(config, "BG_DOWNSCALE_MAX", 768),
+        model_name=getattr(config, "BG_MODEL_NAME", None),
+    ):
         print("✅ Background removal successful. Using processed video.")
         video_to_use = processed_video_path
     else:
@@ -95,7 +102,7 @@ def _initialize_models(video_device: str) -> LipSync:
     lip = LipSync(
         model="wav2lip",
         checkpoint_path=str(config.WEIGHTS_DIR / "wav2lip_gan.pth"),
-        nosmooth=True,
+        nosmooth=False,
         device=video_device,
         cache_dir=str(config.CACHE_DIR),
         img_size=96,
@@ -122,6 +129,12 @@ def main(enable_lipsync: bool = True) -> None:
     flask_thread.start()
 
     _wait_for_setup(state)
+
+    # Try to ensure Ollama is running (auto-start if needed)
+    if not ensure_ollama_running():
+        print("⚠️ Ollama is not reachable and could not be started automatically.")
+        print("   Please start it manually (`ollama serve`) or via system service.")
+
     video_to_use = _prepare_video_assets(state)
 
     initialize_serial(tracking_state, config.POSSIBLE_PORTS, config.BAUD)
