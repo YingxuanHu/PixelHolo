@@ -43,7 +43,7 @@ VIDEO_ICON_PATH = ICON_DIR / "video-generation.png"
 
 # External services
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "phi4:latest"
+OLLAMA_MODEL = "llama3.1"
 
 BASE_SYSTEM_PROMPT = (
     "Keep your responses quite short (aim for less than 7 seconds of verbal speech) but still "
