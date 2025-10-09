@@ -37,11 +37,9 @@ Info for running the program
 
 - The program should be run from a terminal (such as VS Code's integrated terminal) so you can see important debug and processing information.
 
-- The current versions of PixelHolo have complex dependencies. They have already been set up for you, but if you need to recreate the virtual environment for any reoiason, follow the instructions in the requirements.txt file in the same directory as this file. The process of setting up dependencies by avding many conflicts while allowing some has been found to be complicated, so try to avoid recreating the venv if possible.
+- The dependency stack has been simplified. If you need to recreate the virtual environment, follow the instructions at the top of `requirements.txt`.
 
 - Prior to running PixelHolo, enter the Python virtual environment created for this project (by running 'source venv/bin/activate' in the terminal while in the same directory as this file).
-
-- If you run 'pip check', you will see that there are dependency errors, however, these ones are expected as PixelHolo runs fine anyway. 
 
 - When the program starts, a link to a locally hosted web interface will be provided, through which the user will upload a video of a person talking to the camera for at least a minute. The user can optionally also provide text instructions to fine-tune the Ollama AI model that will be used for conversation (Phi-4 is currently being used, but you can of course change this if you wish).
 
@@ -50,6 +48,8 @@ Info for running the program
 - Once initialization is complete, a window will pop up, and if everything went right, it should display a static image of the person on a black background. The program replaces the background with black because when the monitor's screen is put near an acrylic sheet at an angle, the person will appear to float on the acrylic sheet, hence the promise of a 'holographic' avatar.
 
 - At this point, if the conference camera is connected, you should notice it tracking your face. If not, look at the initial debug messages printed in the terminal after you clicked 'Generate' to see what went wrong. The camera currently only serves the purpose of tracking the user's face, but you take it further by implementing something like the ability to differentiate between people if you like.
+
+- Transformers may emit deprecation warnings about attention caches or SDPA; they are non-fatal. If you want to silence them, upgrade `transformers` and set `attn_implementation="eager"` (or disable `output_attentions`) when instantiating models.
 
 - Press the space-bar once to begin recording your prompt (make sure the microphone is connected). You will see a microphone icon pop up in the bottom right corner. You can now say something to the avatar, and simply stop talking when you're done.
 
@@ -73,7 +73,102 @@ Info regarding the two versions of PixelHolo
 
 - The latter only clones the person's voice, and simply plays the video when the avatar is to talk.
 
+Environment Setup
+---
+The shared workstation is provisioned with:
+
+- **CPU**: AMD Ryzen 9 9950X3D (32 threads)
+- **GPU**: NVIDIA GeForce RTX 5090 (SM 120)
+- **Memory**: 64 GB RAM
+- **Storage**: 4 TB NVMe SSD
+
+Ensure the latest NVIDIA driver is installed (`nvidia-smi` should succeed) before continuing. Follow the steps below to create a clean virtual environment tuned for this hardware.
+
+1. **System packages**
+   ```bash
+   sudo apt update
+   sudo apt install -y python3.10 python3.10-venv python3.10-dev \
+       libgtk-3-dev pkg-config portaudio19-dev ffmpeg
+   # Optional when compiling Python 3.10: sudo apt install liblzma-dev
+   ```
+
+2. **Virtual environment**
+   ```bash
+   python3.10 -m venv .venv
+   source .venv/bin/activate
+   pip install --upgrade pip wheel
+   ```
+
+3. **Install PyTorch (GPU preferred)**
+   The RTX 5090 requires the CUDA nightly build (cu128) for full SM 120 support:
+   ```bash
+   pip install --upgrade --pre --no-cache-dir \
+     torch torchaudio torchvision \
+     --index-url https://download.pytorch.org/whl/nightly/cu128
+   ```
+   (If the nightly wheels are temporarily unavailable, fall back to the CUDA 12.1 stable build.)
+   ```bash
+   pip install --upgrade --no-cache-dir \
+     torch==2.5.1+cu121 torchaudio==2.5.1+cu121 torchvision==0.20.1+cu121 \
+     --extra-index-url https://download.pytorch.org/whl/cu121
+   ```
+
+   Optional CUDA check:
+   ```bash
+   python - <<'PY'
+   import torch
+   print("cuda available:", torch.cuda.is_available())
+   if torch.cuda.is_available():
+       print("device:", torch.cuda.get_device_name())
+   PY
+   ```
+   PixelHolo automatically prefers the GPU when `torch.cuda.is_available()` returns `True`; otherwise it will run all workloads on the CPU.
+
+4. **Install Chatterbox-TTS without dragging in conflicting pins**
+   ```bash
+   pip install chatterbox-tts==0.1.2 --no-deps
+   pip install soundfile==0.12.1
+   pip install --upgrade transformers==4.45.2 accelerate==1.0.1 einops==0.8.0
+   python - <<'PY'
+   from importlib.metadata import distribution
+   meta = distribution("chatterbox-tts").locate_file("chatterbox_tts-0.1.2.dist-info/METADATA")
+   text = meta.read_text()
+   text = text.replace("Requires-Dist: torch==2.6.0", "Requires-Dist: torch>=2.10.0.dev20251008")
+   text = text.replace("Requires-Dist: torchaudio==2.6.0", "Requires-Dist: torchaudio>=2.8.0.dev20251008")
+   text = text.replace("Requires-Dist: librosa==0.11.0", "Requires-Dist: librosa>=0.10.2.post1")
+   text = text.replace("Requires-Dist: transformers==4.46.3", "Requires-Dist: transformers>=4.45.2")
+   meta.write_text(text)
+   PY
+   ```
+   The runtime now saves audio via `soundfile`, so TorchCodec/FFmpeg compatibility issues are avoided.
+
+5. **Install PixelHolo dependencies**
+   ```bash
+   pip install -r requirements.txt
+   pip check
+   ```
+   *(Only run this after completing Steps 3–4 so the CUDA 12.8 nightly `torch/torchaudio/torchvision` and patched Chatterbox metadata are already in place. If `pip` complains that `torch>=2.10.0.dev...` is missing, repeat Step 3 to reinstall the nightly build.)*
+
+Ollama Service Reminder
+---
+PixelHolo expects an Ollama instance listening on `http://127.0.0.1:11434`. Before launching the app:
+
+```bash
+# verify / start Ollama
+systemctl --user status ollama 2>/dev/null || systemctl status ollama
+ollama serve &  # or: systemctl --user start ollama
+
+# pull & warm a model
+ollama pull llama3.1
+ollama run llama3.1 "hello"
+
+# quick health checks
+ss -lntp | grep 11434
+curl http://127.0.0.1:11434/api/version
+```
+
+If you run Ollama on a different host or port, update the PixelHolo configuration accordingly (e.g., `OLLAMA_API_BASE`).
+
 Final Remarks
 ---
 Thank you for contributing to this important project! If you have any questions, feel free to us know.
-
