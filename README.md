@@ -169,6 +169,23 @@ curl http://127.0.0.1:11434/api/version
 
 If you run Ollama on a different host or port, update the PixelHolo configuration accordingly (e.g., `OLLAMA_API_BASE`).
 
+How to Run the Program
+---
+```bash
+# Show help
+python PixelHolo_Lipsync_and_Voice_Cloning.py --help
+
+# Enable timing
+python PixelHolo_Lipsync_and_Voice_Cloning.py --enable-timing
+
+# Disable lip-sync (audio only, much faster)
+python PixelHolo_Lipsync_and_Voice_Cloning.py --no-lipsync
+
+# Both timing and no lip-sync
+python PixelHolo_Lipsync_and_Voice_Cloning.py --enable-timing --no-lipsync
+```
+
+
 Final Remarks
 ---
 Thank you for contributing to this important project! If you have any questions, feel free to us know.

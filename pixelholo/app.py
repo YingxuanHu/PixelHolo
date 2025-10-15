@@ -19,7 +19,7 @@ from .background import remove_background_from_video
 from .playback import play_video_and_revert
 from .speech import listen_for_speech
 from .state import AppState, TrackingState
-from .timing import time_operation, print_timing_summary, save_timing_report
+from .timing import time_operation, print_timing_summary, save_timing_report, configure_timing
 from .tracking import (
     cleanup_tracking,
     initialize_camera,
@@ -69,9 +69,12 @@ def _prepare_video_assets(state: AppState) -> Path:
 
 def _load_icons():
     mic_icon = cv2.imread(str(config.MIC_ICON_PATH), cv2.IMREAD_UNCHANGED)
-    thinking_icon = cv2.imread(str(config.THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
-    internet_icon = cv2.imread(str(config.INTERNET_ICON_PATH), cv2.IMREAD_UNCHANGED)
-    speech_icon = cv2.imread(str(config.SPEECH_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    thinking_icon = cv2.imread(
+        str(config.THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    internet_icon = cv2.imread(
+        str(config.INTERNET_ICON_PATH), cv2.IMREAD_UNCHANGED)
+    speech_icon = cv2.imread(
+        str(config.SPEECH_ICON_PATH), cv2.IMREAD_UNCHANGED)
     video_icon = cv2.imread(str(config.VIDEO_ICON_PATH), cv2.IMREAD_UNCHANGED)
 
     icons = {
@@ -108,12 +111,21 @@ def _initialize_models(video_device: str) -> LipSync:
     print(f"LipSync using device: {video_device}")
     if torch.cuda.is_available():
         print(f"CUDA device: {torch.cuda.get_device_name()}")
-        print(f"GPU memory allocated: {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
+        print(
+            f"GPU memory allocated: {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
     return lip
 
 
-def main(enable_lipsync: bool = True) -> None:
-    """Run the voice cloning and interactive session."""
+def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
+    """Run the voice cloning and interactive session.
+
+    Args:
+        enable_lipsync: Enable lip-sync video generation (requires wav2lip model)
+        enable_timing: Enable performance timing reports (shows execution time for each operation)
+    """
+    # Configure timing system
+    configure_timing(enabled=enable_timing, verbose=enable_timing)
+
     print("🚀 Starting the Interactive Voice Clone with Ollama! 🚀")
 
     setup_upload_directories()
@@ -121,7 +133,8 @@ def main(enable_lipsync: bool = True) -> None:
     tracking_state = TrackingState()
 
     app = create_app(state)
-    flask_thread = threading.Thread(target=run_flask_app, args=(app,), daemon=True)
+    flask_thread = threading.Thread(
+        target=run_flask_app, args=(app,), daemon=True)
     flask_thread.start()
 
     _wait_for_setup(state)
@@ -143,7 +156,8 @@ def main(enable_lipsync: bool = True) -> None:
         tts = ChatterboxTTS.from_pretrained(device=device)
     except RuntimeError as exc:
         if device == "cuda":
-            print(f"⚠️ CUDA TTS load failed ({exc}). Falling back to CPU for Chatterbox-TTS.")
+            print(
+                f"⚠️ CUDA TTS load failed ({exc}). Falling back to CPU for Chatterbox-TTS.")
             device = "cpu"
             with time_operation("Chatterbox-TTS Model Loading", verbose=True, track_memory=True):
                 tts = ChatterboxTTS.from_pretrained(device=device)
@@ -153,11 +167,13 @@ def main(enable_lipsync: bool = True) -> None:
     lip = _initialize_models(video_device) if enable_lipsync else None
 
     if not extract_first_frame(video_to_use, config.FIRST_FRAME_PATH):
-        raise RuntimeError(f"Failed to extract first frame from {video_to_use}.")
+        raise RuntimeError(
+            f"Failed to extract first frame from {video_to_use}.")
 
     base_img = cv2.imread(str(config.FIRST_FRAME_PATH))
     if base_img is None:
-        raise RuntimeError(f"Failed to load photo from {config.FIRST_FRAME_PATH}.")
+        raise RuntimeError(
+            f"Failed to load photo from {config.FIRST_FRAME_PATH}.")
 
     icons = _load_icons()
 
@@ -169,7 +185,8 @@ def main(enable_lipsync: bool = True) -> None:
             cv2.waitKey(1)
         except cv2.error as exc:
             display_enabled = False
-            print(f"⚠️ GUI display unavailable ({exc}). Running in headless mode.")
+            print(
+                f"⚠️ GUI display unavailable ({exc}). Running in headless mode.")
 
     if display_enabled:
         print("\n" + "=" * 50)
@@ -214,8 +231,10 @@ def main(enable_lipsync: bool = True) -> None:
 
         print(f"🤖 Clone says: {text_to_speak}")
 
-        state.conversation_history.append({"role": "user", "content": user_prompt})
-        state.conversation_history.append({"role": "assistant", "content": text_to_speak})
+        state.conversation_history.append(
+            {"role": "user", "content": user_prompt})
+        state.conversation_history.append(
+            {"role": "assistant", "content": text_to_speak})
         if len(state.conversation_history) > 20:
             state.conversation_history = state.conversation_history[-20:]
 
@@ -229,12 +248,14 @@ def main(enable_lipsync: bool = True) -> None:
                 print("Generating speech with TTS...")
             with time_operation("TTS Speech Generation", verbose=True, track_memory=True):
                 prompt_audio = Path(state.uploaded_voice_samples[0])
-                wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
+                wav = tts.generate(
+                    text_to_speak, audio_prompt_path=str(prompt_audio))
                 _save_wav(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
         except Exception as tts_error:
             print(f"TTS error: {tts_error}")
             with time_operation("TTS Speech Generation (Retry)", verbose=True, track_memory=True):
-                wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
+                wav = tts.generate(
+                    text_to_speak, audio_prompt_path=str(prompt_audio))
                 _save_wav(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
 
         if display_enabled:
@@ -242,7 +263,8 @@ def main(enable_lipsync: bool = True) -> None:
 
         if enable_lipsync and lip is not None:
             try:
-                print("🎬 Starting lip-sync generation (includes face detection + inference)...")
+                print(
+                    "🎬 Starting lip-sync generation (includes face detection + inference)...")
                 with time_operation("Lip-sync Video Generation (Complete)", verbose=True, track_memory=True):
                     lip.sync(
                         str(video_to_use),
@@ -253,20 +275,25 @@ def main(enable_lipsync: bool = True) -> None:
                 if display_enabled:
                     print("Playing lip-synced video...")
                     with time_operation("Video Playback", verbose=True, track_memory=False):
-                        play_video_and_revert(config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
+                        play_video_and_revert(
+                            config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
                 else:
-                    print(f"Lip-synced video saved to: {config.SYNCED_VIDEO_PATH}")
+                    print(
+                        f"Lip-synced video saved to: {config.SYNCED_VIDEO_PATH}")
             except Exception as sync_error:
                 print(f"❌ Lip-sync generation failed: {sync_error}")
                 if display_enabled:
                     with time_operation("Video Playback (Fallback)", verbose=True, track_memory=False):
-                        print("Falling back to original video with generated audio...")
-                        play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
+                        print(
+                            "Falling back to original video with generated audio...")
+                        play_video_and_revert(
+                            video_to_use, config.FIRST_FRAME_PATH)
         else:
             if display_enabled:
                 print("Playing original video with generated audio...")
                 with time_operation("Video Playback", verbose=True, track_memory=False):
-                    play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
+                    play_video_and_revert(
+                        video_to_use, config.FIRST_FRAME_PATH)
 
         if not display_enabled:
             print(f"Generated speech saved to: {config.OUTPUT_WAV_PATH}")
@@ -299,7 +326,8 @@ def main(enable_lipsync: bool = True) -> None:
                     _process_prompt(user_prompt)
             else:
                 try:
-                    user_prompt = input("\nType your prompt (or 'quit' to exit): ").strip()
+                    user_prompt = input(
+                        "\nType your prompt (or 'quit' to exit): ").strip()
                 except EOFError:
                     user_prompt = "quit"
 
@@ -326,10 +354,9 @@ def main(enable_lipsync: bool = True) -> None:
             if path.exists():
                 shutil.rmtree(path)
 
-    # Print timing summary before exit
-    print_timing_summary()
-    
-    # Save timing report to file
-    save_timing_report("timing_report.txt")
+    # Print timing summary before exit (only if timing enabled)
+    if enable_timing:
+        print_timing_summary()
+        save_timing_report("timing_report.txt")
 
-        print("Program finished cleanly.")
+    print("Program finished cleanly.")

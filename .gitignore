@@ -20,3 +20,6 @@ cache/
 # python caches
 __pycache__/
 *.pyc
+
+# timing report
+timing_report.txt
