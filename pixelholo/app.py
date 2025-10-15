@@ -7,9 +7,8 @@ import threading
 import time
 
 import cv2
-import numpy as np
 import torch
-import torchaudio as ta
+import soundfile as sf
 from chatterbox.tts import ChatterboxTTS
 from lipsync import LipSync
 
@@ -18,7 +17,7 @@ from .ai import get_ollama_response
 from .audio_processing import extract_first_frame
 from .background import remove_background_from_video
 from .playback import play_video_and_revert
-# from .speech import listen_for_speech
+from .speech import listen_for_speech
 from .state import AppState, TrackingState
 from .timing import time_operation, print_timing_summary, save_timing_report
 from .tracking import (
@@ -30,6 +29,16 @@ from .tracking import (
 from .ui import overlay_icon
 from .utils import setup_upload_directories
 from .web import create_app, run_flask_app
+
+
+def _save_wav(path: str, wav_tensor: torch.Tensor, sample_rate: int) -> None:
+    """Persist a waveform tensor to disk using soundfile."""
+    waveform = wav_tensor.detach().cpu()
+    if waveform.dim() == 2:  # (C, T) -> (T, C)
+        waveform = waveform.transpose(0, 1)
+    elif waveform.dim() > 2:
+        waveform = waveform.squeeze()
+    sf.write(path, waveform.numpy(), sample_rate, subtype="PCM_16")
 
 
 def _wait_for_setup(state: AppState) -> None:
@@ -58,32 +67,6 @@ def _prepare_video_assets(state: AppState) -> Path:
     return video_to_use
 
 
-def _generate_placeholder_icon(name: str, size: int = 128) -> np.ndarray:
-    """Create a simple RGBA placeholder icon when assets are missing."""
-    palette = {
-        "mic": (52, 93, 180),
-        "thinking": (156, 102, 31),
-        "internet": (34, 139, 34),
-        "speech": (128, 0, 128),
-        "video": (178, 34, 34),
-    }
-    color = palette.get(name, (100, 100, 100))
-    icon = np.zeros((size, size, 4), dtype=np.uint8)
-    icon[..., :3] = color
-    icon[..., 3] = 255
-    cv2.putText(
-        icon,
-        name[:2].upper(),
-        (int(size * 0.15), int(size * 0.65)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1.8,
-        (255, 255, 255, 255),
-        3,
-        cv2.LINE_AA,
-    )
-    return icon
-
-
 def _load_icons():
     mic_icon = cv2.imread(str(config.MIC_ICON_PATH), cv2.IMREAD_UNCHANGED)
     thinking_icon = cv2.imread(str(config.THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
@@ -101,10 +84,9 @@ def _load_icons():
 
     for name, icon in icons.items():
         if icon is None:
-            print(
-                f"Warning: '{name}' icon missing at {config.ICON_DIR}. Using placeholder graphic."
+            raise FileNotFoundError(
+                f"ERROR: Could not load {name} icon. Ensure the file exists in 'assets/icons'."
             )
-            icons[name] = _generate_placeholder_icon(name)
 
     return icons
 
@@ -157,8 +139,16 @@ def main(enable_lipsync: bool = True) -> None:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🚀 Loading Chatterbox-TTS model on {device.upper()}...")
-    with time_operation("Chatterbox-TTS Model Loading", verbose=True, track_memory=True):
+    try:
         tts = ChatterboxTTS.from_pretrained(device=device)
+    except RuntimeError as exc:
+        if device == "cuda":
+            print(f"⚠️ CUDA TTS load failed ({exc}). Falling back to CPU for Chatterbox-TTS.")
+            device = "cpu"
+            with time_operation("Chatterbox-TTS Model Loading", verbose=True, track_memory=True):
+                tts = ChatterboxTTS.from_pretrained(device=device)
+        else:
+            raise
 
     lip = _initialize_models(video_device) if enable_lipsync else None
 
@@ -172,7 +162,6 @@ def main(enable_lipsync: bool = True) -> None:
     icons = _load_icons()
 
     display_enabled = bool(os.environ.get("DISPLAY"))
-
     if display_enabled:
         try:
             cv2.namedWindow(config.DISPLAY_WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -180,7 +169,7 @@ def main(enable_lipsync: bool = True) -> None:
             cv2.waitKey(1)
         except cv2.error as exc:
             display_enabled = False
-            print(f"⚠️ GUI display unavailable ({exc}). Switching to headless mode.")
+            print(f"⚠️ GUI display unavailable ({exc}). Running in headless mode.")
 
     if display_enabled:
         print("\n" + "=" * 50)
@@ -192,7 +181,7 @@ def main(enable_lipsync: bool = True) -> None:
     else:
         print("\n" + "=" * 50)
         print("✅ Setup complete! Running in headless mode.")
-        print("Type your prompts directly into the terminal. Enter 'quit' to exit.")
+        print("Type your prompts into this terminal. Enter 'quit' to exit.")
         print("=" * 50 + "\n")
 
     def _show_icon(icon_key: str) -> None:
@@ -230,20 +219,26 @@ def main(enable_lipsync: bool = True) -> None:
         if len(state.conversation_history) > 20:
             state.conversation_history = state.conversation_history[-20:]
 
+        if not state.uploaded_voice_samples:
+            raise RuntimeError("Voice sample missing for TTS generation.")
+
         try:
-            _show_icon("speech")
-            print("Generating speech with TTS...")
+            if display_enabled:
+                _show_icon("speech")
+            else:
+                print("Generating speech with TTS...")
             with time_operation("TTS Speech Generation", verbose=True, track_memory=True):
                 prompt_audio = Path(state.uploaded_voice_samples[0])
                 wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
-                ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
+                _save_wav(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
         except Exception as tts_error:
             print(f"TTS error: {tts_error}")
             with time_operation("TTS Speech Generation (Retry)", verbose=True, track_memory=True):
                 wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
-                ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
+                _save_wav(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
 
-        _show_icon("video")
+        if display_enabled:
+            _show_icon("video")
 
         if enable_lipsync and lip is not None:
             try:
@@ -259,11 +254,13 @@ def main(enable_lipsync: bool = True) -> None:
                     print("Playing lip-synced video...")
                     with time_operation("Video Playback", verbose=True, track_memory=False):
                         play_video_and_revert(config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
+                else:
+                    print(f"Lip-synced video saved to: {config.SYNCED_VIDEO_PATH}")
             except Exception as sync_error:
                 print(f"❌ Lip-sync generation failed: {sync_error}")
-                print("Falling back to original video with generated audio...")
                 if display_enabled:
                     with time_operation("Video Playback (Fallback)", verbose=True, track_memory=False):
+                        print("Falling back to original video with generated audio...")
                         play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
         else:
             if display_enabled:
@@ -272,66 +269,62 @@ def main(enable_lipsync: bool = True) -> None:
                     play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
 
         if not display_enabled:
-            print("Generated audio saved to:", config.OUTPUT_WAV_PATH)
+            print(f"Generated speech saved to: {config.OUTPUT_WAV_PATH}")
 
         _reset_display()
 
-    while True:
-        if display_enabled:
-            key = cv2.waitKey(0) & 0xFF
-            if key == ord("q"):
-                print("Shutting down...")
-                tracking_state.tracking_active = False
-                time.sleep(0.2)
-                break
-            if key == ord(" "):
-                _show_icon("mic")
+    try:
+        while True:
+            if display_enabled:
+                key = cv2.waitKey(0) & 0xFF
+                if key == ord("q"):
+                    print("Shutting down...")
+                    tracking_state.tracking_active = False
+                    time.sleep(0.2)
+                    break
+                if key == ord(" "):
+                    _show_icon("mic")
 
-                # Original microphone flow (kept for quick re-enable):
-                # user_prompt = listen_for_speech()
-                # if not user_prompt:
-                #     print("Could not understand you. Please try again.")
-                #     _reset_display()
-                #     continue
+                    try:
+                        user_prompt = listen_for_speech() or ""
+                    except Exception as exc:
+                        print(f"Microphone error: {exc}")
+                        user_prompt = ""
 
+                    if not user_prompt:
+                        print("Could not understand you. Please try again.")
+                        _reset_display()
+                        continue
+
+                    _process_prompt(user_prompt)
+            else:
                 try:
-                    user_prompt = input("\nType your prompt (leave blank to cancel): ").strip()
+                    user_prompt = input("\nType your prompt (or 'quit' to exit): ").strip()
                 except EOFError:
-                    user_prompt = ""
+                    user_prompt = "quit"
+
+                if user_prompt.lower() in {"quit", "q"}:
+                    print("Shutting down...")
+                    tracking_state.tracking_active = False
+                    time.sleep(0.2)
+                    break
 
                 if not user_prompt:
                     print("No prompt captured. Please try again.")
-                    _reset_display()
                     continue
 
                 _process_prompt(user_prompt)
-        else:
-            try:
-                user_prompt = input("\nType your prompt (or 'quit' to exit): ").strip()
-            except EOFError:
-                user_prompt = "quit"
+    finally:
+        print("Cleaning up...")
+        cleanup_tracking(tracking_state)
 
-            if user_prompt.lower() in {"quit", "q"}:
-                print("Shutting down...")
-                tracking_state.tracking_active = False
-                time.sleep(0.2)
-                break
+        if display_enabled:
+            cv2.destroyAllWindows()
 
-            if not user_prompt:
-                print("No prompt captured. Please try again.")
-                continue
-
-            _process_prompt(user_prompt)
-
-    print("Cleaning up...")
-    cleanup_tracking(tracking_state)
-
-    cv2.destroyAllWindows()
-
-    print("Cleaning up temporary files...")
-    for path in (config.UPLOADS_DIR, config.TEMP_DIR):
-        if path.exists():
-            shutil.rmtree(path)
+        print("Cleaning up temporary files...")
+        for path in (config.UPLOADS_DIR, config.TEMP_DIR):
+            if path.exists():
+                shutil.rmtree(path)
 
     # Print timing summary before exit
     print_timing_summary()
@@ -339,4 +332,4 @@ def main(enable_lipsync: bool = True) -> None:
     # Save timing report to file
     save_timing_report("timing_report.txt")
 
-    print("Program finished cleanly.")
+        print("Program finished cleanly.")
