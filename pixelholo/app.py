@@ -20,6 +20,7 @@ from .background import remove_background_from_video
 from .playback import play_video_and_revert
 # from .speech import listen_for_speech
 from .state import AppState, TrackingState
+from .timing import time_operation, print_timing_summary, save_timing_report
 from .tracking import (
     cleanup_tracking,
     initialize_camera,
@@ -47,11 +48,12 @@ def _prepare_video_assets(state: AppState) -> Path:
     video_to_use = Path(state.uploaded_input_video)
 
     print("🎬 Starting video background removal process...")
-    if remove_background_from_video(video_to_use, processed_video_path):
-        print("✅ Background removal successful. Using processed video.")
-        video_to_use = processed_video_path
-    else:
-        print("⚠️ Background removal failed. Proceeding with the original video.")
+    with time_operation("Background Removal", verbose=True, track_memory=True):
+        if remove_background_from_video(video_to_use, processed_video_path):
+            print("✅ Background removal successful. Using processed video.")
+            video_to_use = processed_video_path
+        else:
+            print("⚠️ Background removal failed. Proceeding with the original video.")
 
     return video_to_use
 
@@ -110,15 +112,16 @@ def _load_icons():
 def _initialize_models(video_device: str) -> LipSync:
     config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     print("🎬 Loading LipSync model...")
-    lip = LipSync(
-        model="wav2lip",
-        checkpoint_path=str(config.WEIGHTS_DIR / "wav2lip_gan.pth"),
-        nosmooth=True,
-        device=video_device,
-        cache_dir=str(config.CACHE_DIR),
-        img_size=96,
-        save_cache=True,
-    )
+    with time_operation("LipSync Model Loading", verbose=True, track_memory=True):
+        lip = LipSync(
+            model="wav2lip",
+            checkpoint_path=str(config.WEIGHTS_DIR / "wav2lip_gan.pth"),
+            nosmooth=True,
+            device=video_device,
+            cache_dir=str(config.CACHE_DIR),
+            img_size=96,
+            save_cache=True,
+        )
     print("\n✅ LipSync model loaded")
     print(f"LipSync using device: {video_device}")
     if torch.cuda.is_available():
@@ -154,7 +157,8 @@ def main(enable_lipsync: bool = True) -> None:
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"🚀 Loading Chatterbox-TTS model on {device.upper()}...")
-    tts = ChatterboxTTS.from_pretrained(device=device)
+    with time_operation("Chatterbox-TTS Model Loading", verbose=True, track_memory=True):
+        tts = ChatterboxTTS.from_pretrained(device=device)
 
     lip = _initialize_models(video_device) if enable_lipsync else None
 
@@ -205,13 +209,14 @@ def main(enable_lipsync: bool = True) -> None:
 
     def _process_prompt(user_prompt: str) -> None:
         print(f"💬 You said: {user_prompt}")
-        text_to_speak = get_ollama_response(
-            user_prompt,
-            state.user_system_prompt,
-            state.conversation_history,
-            base_img if display_enabled else None,
-            icons["internet"] if display_enabled else None,
-        )
+        with time_operation("Ollama Response Generation", verbose=True, track_memory=True):
+            text_to_speak = get_ollama_response(
+                user_prompt,
+                state.user_system_prompt,
+                state.conversation_history,
+                base_img if display_enabled else None,
+                icons["internet"] if display_enabled else None,
+            )
 
         if not text_to_speak:
             print("Ollama returned an empty response.")
@@ -228,36 +233,43 @@ def main(enable_lipsync: bool = True) -> None:
         try:
             _show_icon("speech")
             print("Generating speech with TTS...")
-            prompt_audio = Path(state.uploaded_voice_samples[0])
-            wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
-            ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
+            with time_operation("TTS Speech Generation", verbose=True, track_memory=True):
+                prompt_audio = Path(state.uploaded_voice_samples[0])
+                wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
+                ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
         except Exception as tts_error:
             print(f"TTS error: {tts_error}")
-            wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
-            ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
+            with time_operation("TTS Speech Generation (Retry)", verbose=True, track_memory=True):
+                wav = tts.generate(text_to_speak, audio_prompt_path=str(prompt_audio))
+                ta.save(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
 
         _show_icon("video")
 
         if enable_lipsync and lip is not None:
             try:
-                lip.sync(
-                    str(video_to_use),
-                    str(config.OUTPUT_WAV_PATH),
-                    str(config.SYNCED_VIDEO_PATH),
-                )
+                print("🎬 Starting lip-sync generation (includes face detection + inference)...")
+                with time_operation("Lip-sync Video Generation (Complete)", verbose=True, track_memory=True):
+                    lip.sync(
+                        str(video_to_use),
+                        str(config.OUTPUT_WAV_PATH),
+                        str(config.SYNCED_VIDEO_PATH),
+                    )
                 print("✅ Lip-sync video generation completed.")
                 if display_enabled:
                     print("Playing lip-synced video...")
-                    play_video_and_revert(config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
+                    with time_operation("Video Playback", verbose=True, track_memory=False):
+                        play_video_and_revert(config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
             except Exception as sync_error:
                 print(f"❌ Lip-sync generation failed: {sync_error}")
                 print("Falling back to original video with generated audio...")
                 if display_enabled:
-                    play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
+                    with time_operation("Video Playback (Fallback)", verbose=True, track_memory=False):
+                        play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
         else:
             if display_enabled:
                 print("Playing original video with generated audio...")
-                play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
+                with time_operation("Video Playback", verbose=True, track_memory=False):
+                    play_video_and_revert(video_to_use, config.FIRST_FRAME_PATH)
 
         if not display_enabled:
             print("Generated audio saved to:", config.OUTPUT_WAV_PATH)
@@ -320,5 +332,11 @@ def main(enable_lipsync: bool = True) -> None:
     for path in (config.UPLOADS_DIR, config.TEMP_DIR):
         if path.exists():
             shutil.rmtree(path)
+
+    # Print timing summary before exit
+    print_timing_summary()
+    
+    # Save timing report to file
+    save_timing_report("timing_report.txt")
 
     print("Program finished cleanly.")

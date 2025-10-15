@@ -20,6 +20,7 @@ from .config import (
     OLLAMA_MODEL,
     THINKING_ICON_PATH,
 )
+from .timing import time_operation
 from .ui import overlay_icon
 
 
@@ -215,7 +216,8 @@ def get_ollama_response(
             cv2.imshow(DISPLAY_WINDOW_NAME, img_with_internet)
             cv2.waitKey(1)
 
-        search_results = web_search(prompt)
+        with time_operation("Web Search", verbose=True, track_memory=False):
+            search_results = web_search(prompt)
         if search_results and "No results found" not in search_results:
             search_context = (
                 f"\n\nCurrent search results for '{prompt}':\n{search_results}\n\n"
@@ -255,9 +257,10 @@ def get_ollama_response(
     headers = {"Content-Type": "application/json"}
 
     try:
-        response = requests.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
-        response_data = response.json()
+        with time_operation("Ollama API Call", verbose=True, track_memory=False):
+            response = requests.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+            response_data = response.json()
 
         if "response" in response_data:
             ai_response = response_data["response"].strip()
