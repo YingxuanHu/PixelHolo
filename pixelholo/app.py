@@ -10,13 +10,14 @@ import cv2
 import torch
 import soundfile as sf
 from chatterbox.tts import ChatterboxTTS
-from lipsync import LipSync
+from .lipsync_wrapper import LipSync
 
 from . import config
 from .ai import get_ollama_response
-from .audio_processing import extract_first_frame
+from .audio_processing import extract_first_frame, normalize_audio_format
 from .background import remove_background_from_video
 from .playback import play_video_and_revert
+from .preview import generate_preview_html
 from .speech import listen_for_speech
 from .state import AppState, TrackingState
 from .timing import time_operation, print_timing_summary, save_timing_report, configure_timing
@@ -100,12 +101,13 @@ def _initialize_models(video_device: str) -> LipSync:
     with time_operation("LipSync Model Loading", verbose=True, track_memory=True):
         lip = LipSync(
             model="wav2lip",
-            checkpoint_path=str(config.WEIGHTS_DIR / "wav2lip_gan.pth"),
-            nosmooth=True,
+            checkpoint_path=str(config.WEIGHTS_DIR / "wav2lip_gan2.pth"),
+            nosmooth=False,
             device=video_device,
             cache_dir=str(config.CACHE_DIR),
             img_size=96,
             save_cache=True,
+            wav2lip_batch_size=64,
         )
     print("\n✅ LipSync model loaded")
     print(f"LipSync using device: {video_device}")
@@ -116,6 +118,18 @@ def _initialize_models(video_device: str) -> LipSync:
     return lip
 
 
+def _warm_lipsync_cache(lip: LipSync, video_path: Path) -> None:
+    """Run face detection once so subsequent lip-sync calls use cached boxes."""
+    try:
+        lip._filepath = str(video_path)
+        print("🔍 Precomputing face detection cache...")
+        frames, _ = lip._load_input_face(str(video_path))
+        lip.face_detect(frames if frames else [])
+        print("✅ Face detection cache ready.")
+    except Exception as exc:
+        print(f"⚠️ Face detection cache warm-up skipped: {exc}")
+
+
 def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
     """Run the voice cloning and interactive session.
 
@@ -123,9 +137,7 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
         enable_lipsync: Enable lip-sync video generation (requires wav2lip model)
         enable_timing: Enable performance timing reports (shows execution time for each operation)
     """
-    # Configure timing system
     configure_timing(enabled=enable_timing, verbose=enable_timing)
-
     print("🚀 Starting the Interactive Voice Clone with Ollama! 🚀")
 
     setup_upload_directories()
@@ -165,6 +177,9 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
             raise
 
     lip = _initialize_models(video_device) if enable_lipsync else None
+
+    if lip is not None:
+        _warm_lipsync_cache(lip, video_to_use)
 
     if not extract_first_frame(video_to_use, config.FIRST_FRAME_PATH):
         raise RuntimeError(
@@ -251,16 +266,20 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
                 wav = tts.generate(
                     text_to_speak, audio_prompt_path=str(prompt_audio))
                 _save_wav(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
+                normalize_audio_format(config.OUTPUT_WAV_PATH, sample_rate=16000)
         except Exception as tts_error:
             print(f"TTS error: {tts_error}")
             with time_operation("TTS Speech Generation (Retry)", verbose=True, track_memory=True):
                 wav = tts.generate(
                     text_to_speak, audio_prompt_path=str(prompt_audio))
                 _save_wav(str(config.OUTPUT_WAV_PATH), wav, tts.sr)
+                normalize_audio_format(config.OUTPUT_WAV_PATH, sample_rate=16000)
 
         if display_enabled:
             _show_icon("video")
 
+        preview_path = None
+        final_video_path = Path(video_to_use)
         if enable_lipsync and lip is not None:
             try:
                 print(
@@ -271,15 +290,19 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
                         str(config.OUTPUT_WAV_PATH),
                         str(config.SYNCED_VIDEO_PATH),
                     )
+                final_video_path = Path(config.SYNCED_VIDEO_PATH)
                 print("✅ Lip-sync video generation completed.")
+                preview_path = generate_preview_html(final_video_path)
                 if display_enabled:
                     print("Playing lip-synced video...")
                     with time_operation("Video Playback", verbose=True, track_memory=False):
                         play_video_and_revert(
-                            config.SYNCED_VIDEO_PATH, config.FIRST_FRAME_PATH)
+                            str(final_video_path), config.FIRST_FRAME_PATH)
                 else:
                     print(
-                        f"Lip-synced video saved to: {config.SYNCED_VIDEO_PATH}")
+                        f"Lip-synced video saved to: {final_video_path}")
+                    if preview_path:
+                        print(f"Preview HTML saved to: {preview_path}")
             except Exception as sync_error:
                 print(f"❌ Lip-sync generation failed: {sync_error}")
                 if display_enabled:
@@ -288,15 +311,26 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
                             "Falling back to original video with generated audio...")
                         play_video_and_revert(
                             video_to_use, config.FIRST_FRAME_PATH)
+                else:
+                    print("Falling back to original video with generated audio...")
+                    final_video_path = Path(video_to_use)
+                    preview_path = generate_preview_html(Path(config.SYNCED_VIDEO_PATH)) or generate_preview_html(final_video_path)
+                    if preview_path:
+                        print(f"Preview HTML saved to: {preview_path}")
         else:
             if display_enabled:
                 print("Playing original video with generated audio...")
                 with time_operation("Video Playback", verbose=True, track_memory=False):
                     play_video_and_revert(
                         video_to_use, config.FIRST_FRAME_PATH)
+            final_video_path = Path(video_to_use)
+            preview_path = generate_preview_html(final_video_path)
+            if not display_enabled and preview_path:
+                print(f"Preview HTML saved to: {preview_path}")
 
         if not display_enabled:
             print(f"Generated speech saved to: {config.OUTPUT_WAV_PATH}")
+            print(f"Video available at: {final_video_path}")
 
         _reset_display()
 
@@ -350,7 +384,7 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
             cv2.destroyAllWindows()
 
         print("Cleaning up temporary files...")
-        for path in (config.UPLOADS_DIR, config.TEMP_DIR):
+        for path in (config.UPLOADS_DIR, config.TEMP_DIR, config.CACHE_DIR):
             if path.exists():
                 shutil.rmtree(path)
 

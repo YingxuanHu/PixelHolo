@@ -1,5 +1,6 @@
 """Configuration constants for the PixelHolo application."""
 
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -42,8 +43,8 @@ SPEECH_ICON_PATH = ICON_DIR / "speech-synthesis.png"
 VIDEO_ICON_PATH = ICON_DIR / "video-generation.png"
 
 # External services
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llama3.1"
+OLLAMA_API_URL = os.environ.get("PIXELHOLO_OLLAMA_URL", "http://localhost:11434/api/generate")
+OLLAMA_MODEL = os.environ.get("PIXELHOLO_OLLAMA_MODEL", "llama3.1")
 
 BASE_SYSTEM_PROMPT = (
     "Keep your responses quite short (aim for less than 7 seconds of verbal speech) but still "

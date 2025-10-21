@@ -16,29 +16,80 @@ def isolate_voice_from_audio(input_audio_path: Path | str, output_audio_path: Pa
         from audio_separator.separator import Separator
 
         print("🎵 Isolating voice from audio using AI...")
+        output_audio_path = Path(output_audio_path)
+        output_audio_path.parent.mkdir(parents=True, exist_ok=True)
+
         separator = Separator(
             log_level=logging.WARNING,
             log_formatter=None,
             model_file_dir=str(config.MODELS_DIR),
-            output_dir=str(Path(output_audio_path).parent),
+            output_dir=str(output_audio_path.parent),
             output_format="WAV",
-            output_single_stem="vocals",
+            output_single_stem="Vocals",
         )
 
-        separated_files = separator.separate(str(input_audio_path))
+        input_audio_path = str(input_audio_path)
+        output_files = separator.separate(
+            input_audio_path,
+            custom_output_names={"Vocals": output_audio_path.stem},
+        ) or []
 
-        output_audio_path = Path(output_audio_path)
-        for file_path in separated_files:
-            candidate = Path(file_path)
-            if candidate.exists():
-                candidate.rename(output_audio_path)
-                print(f"✅ Voice isolated successfully: {output_audio_path}")
-                return True
+        produced_path = next(
+            (Path(path) for path in output_files if Path(path).name.lower() == output_audio_path.name.lower()),
+            None,
+        )
+        if produced_path is None and output_files:
+            produced_path = Path(output_files[0])
+
+        if produced_path and produced_path.exists():
+            if produced_path.resolve() != output_audio_path.resolve():
+                produced_path.replace(output_audio_path)
+            print(f"✅ Voice isolated successfully: {output_audio_path}")
+            return True
 
         print("⚠️ Voice isolation did not produce the expected output file.")
         return False
     except Exception as exc:
         print(f"❌ Voice isolation failed: {exc}")
+        return False
+
+
+def normalize_audio_format(
+    audio_path: Path | str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+) -> bool:
+    """Ensure an audio file uses the desired sample rate and channel count."""
+    audio_path = Path(audio_path)
+    if not audio_path.exists():
+        return False
+
+    temp_path = audio_path.with_suffix(".tmp.wav")
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(audio_path),
+        "-ac",
+        str(channels),
+        "-ar",
+        str(sample_rate),
+        str(temp_path),
+    ]
+
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        temp_path.replace(audio_path)
+        return True
+    except subprocess.CalledProcessError as exc:
+        print(f"⚠️ Audio normalisation failed: {exc}")
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+        return False
+    except Exception as exc:
+        print(f"⚠️ Unexpected error during audio normalisation: {exc}")
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
         return False
 
 

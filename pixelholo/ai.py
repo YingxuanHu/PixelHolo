@@ -1,11 +1,13 @@
-"""AI interaction utilities including Ollama integration and internet search.""" 
+"""AI interaction utilities including Ollama integration and internet search."""
 
 import json
 import random
 import re
+import shutil
+import subprocess
 import time
 import urllib.parse
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 import cv2
 import requests
@@ -200,6 +202,92 @@ def web_search(query: str, max_results: int = 4) -> str:
         return f"Search failed: {exc}"
 
 
+def _ollama_cli_path() -> Optional[str]:
+    """Return the Ollama executable path if available."""
+    return shutil.which("ollama")
+
+
+def _model_list_contains(model: str, listing: str) -> bool:
+    """Check whether a model name appears in `ollama list` output."""
+    target = model.split(":", 1)[0]
+    for line in listing.splitlines():
+        if not line.strip():
+            continue
+        name = line.split()[0]
+        base = name.split(":", 1)[0]
+        if name == model or base == target:
+            return True
+    return False
+
+
+def _ensure_ollama_model(model: str) -> bool:
+    """Ensure the requested Ollama model is installed, attempting a pull if needed."""
+    executable = _ollama_cli_path()
+    if executable is None:
+        print("🔌 Ollama CLI not found on PATH; cannot auto-install models.")
+        return False
+
+    try:
+        list_result = subprocess.run(
+            [executable, "list"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        if list_result.returncode == 0 and _model_list_contains(model, list_result.stdout):
+            return True
+    except Exception as exc:
+        print(f"⚠️ Unable to inspect local Ollama models: {exc}")
+        return False
+
+    print(f"⬇️ Pulling Ollama model '{model}'...")
+    try:
+        with subprocess.Popen(
+            [executable, "pull", model],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        ) as proc:
+            assert proc.stdout
+            for line in proc.stdout:
+                if line:
+                    print(line.rstrip())
+            return_code = proc.wait()
+
+        if return_code == 0:
+            return True
+
+        print(f"❌ Failed to pull model '{model}'. Exit code: {return_code}")
+    except subprocess.CalledProcessError as exc:
+        message = exc.stderr.strip() if exc.stderr else str(exc)
+        print(f"❌ Failed to pull model '{model}': {message}")
+    except Exception as exc:  # pragma: no cover
+        print(f"❌ Unexpected error pulling model '{model}': {exc}")
+    return False
+
+
+def _derive_chat_endpoint(url: str) -> Optional[str]:
+    """Return the equivalent /api/chat endpoint for a given Ollama API URL."""
+    if not url.endswith("/generate"):
+        return None
+    return url[: -len("/generate")] + "/chat"
+
+
+def _extract_response_text(response_data: Dict[str, object]) -> Optional[str]:
+    """Extract assistant text from either /api/generate or /api/chat responses."""
+    candidate = response_data.get("response")
+    if isinstance(candidate, str):
+        return candidate.strip()
+    message = response_data.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content.strip()
+    return None
+
+
 def get_ollama_response(
     prompt: str,
     system_prompt: Optional[str],
@@ -240,13 +328,28 @@ def get_ollama_response(
 
     if conversation_history:
         for message in conversation_history[-10:]:
-            if message["role"] == "user":
-                full_prompt += f"Human: {message['content']}\n"
+            role = message.get("role")
+            content = message.get("content")
+            if not role or not content:
+                continue
+            if role == "user":
+                full_prompt += f"Human: {content}\n"
             else:
-                full_prompt += f"Assistant: {message['content']}\n"
+                full_prompt += f"Assistant: {content}\n"
 
     user_message = prompt + search_context
     full_prompt += f"Human: {user_message}\nAssistant: "
+
+    messages: List[Dict[str, str]] = []
+    if current_system_prompt:
+        messages.append({"role": "system", "content": current_system_prompt})
+    if conversation_history:
+        for message in conversation_history[-10:]:
+            role = message.get("role")
+            content = message.get("content")
+            if role in {"user", "assistant", "system"} and content:
+                messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": user_message})
 
     payload = {
         "model": OLLAMA_MODEL,
@@ -256,24 +359,66 @@ def get_ollama_response(
     }
     headers = {"Content-Type": "application/json"}
 
-    try:
-        with time_operation("Ollama API Call", verbose=True, track_memory=False):
-            response = requests.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
-            response.raise_for_status()
-            response_data = response.json()
+    attempted_model_install = False
+    attempted_chat_endpoint = False
 
-        if "response" in response_data:
-            ai_response = response_data["response"].strip()
-            return remove_emojis(ai_response)
-        print("Unexpected response format from Ollama")
-        return "I seem to be having trouble thinking right now."
-    except requests.exceptions.RequestException as exc:
-        print(f"Error connecting to Ollama API: {exc}")
-        print("Please ensure Ollama is running on port 11434 with a model loaded.")
-        return "I seem to be having trouble thinking right now."
-    except json.JSONDecodeError as exc:
-        print(f"Error parsing JSON response: {exc}")
-        return "I seem to be having trouble thinking right now."
-    except Exception as exc:
-        print(f"Unexpected error: {exc}")
-        return "I seem to be having trouble thinking right now."
+    while True:
+        try:
+            with time_operation("Ollama API Call", verbose=True, track_memory=False):
+                response = requests.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
+                response.raise_for_status()
+                response_data = response.json()
+
+            extracted = _extract_response_text(response_data)
+            if extracted:
+                return remove_emojis(extracted)
+            print("Unexpected response format from Ollama")
+            break
+        except requests.exceptions.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            body_text = exc.response.text if exc.response is not None else ""
+
+            if status == 404 and not attempted_model_install:
+                attempted_model_install = True
+                if _ensure_ollama_model(OLLAMA_MODEL):
+                    print("✅ Model downloaded. Retrying Ollama request...")
+                    continue
+
+            if status == 404 and not attempted_chat_endpoint:
+                chat_url = _derive_chat_endpoint(OLLAMA_API_URL)
+                if chat_url:
+                    attempted_chat_endpoint = True
+                    chat_payload = {
+                        "model": OLLAMA_MODEL,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": 0.7, "num_predict": 150},
+                    }
+                    try:
+                        chat_response = requests.post(chat_url, json=chat_payload, headers=headers, timeout=60)
+                        chat_response.raise_for_status()
+                        response_data = chat_response.json()
+                        extracted = _extract_response_text(response_data)
+                        if extracted:
+                            print("ℹ️ Used Ollama chat endpoint fallback.")
+                            return remove_emojis(extracted)
+                    except requests.exceptions.RequestException as chat_exc:
+                        print(f"Error connecting to Ollama chat endpoint: {chat_exc}")
+
+            print(f"Error connecting to Ollama API: {exc}")
+            if body_text:
+                print(f"Ollama response body: {body_text.strip()}")
+            print("Please ensure Ollama is running and the configured model exists.")
+            break
+        except requests.exceptions.RequestException as exc:
+            print(f"Error connecting to Ollama API: {exc}")
+            print("Please ensure Ollama is running on port 11434 with a model loaded.")
+            break
+        except json.JSONDecodeError as exc:
+            print(f"Error parsing JSON response: {exc}")
+            break
+        except Exception as exc:
+            print(f"Unexpected error: {exc}")
+            break
+
+    return "I seem to be having trouble thinking right now."

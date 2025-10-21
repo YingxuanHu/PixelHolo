@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 
 import torch
-from lipsync import LipSync
+from pixelholo.lipsync_wrapper import LipSync
 
 from pixelholo import config
 

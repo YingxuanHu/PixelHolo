@@ -6,7 +6,11 @@ from pathlib import Path
 from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
 
-from .audio_processing import extract_audio_from_video, isolate_voice_from_audio
+from .audio_processing import (
+    extract_audio_from_video,
+    isolate_voice_from_audio,
+    normalize_audio_format,
+)
 from .config import (
     BASE_SYSTEM_PROMPT,
     EXTRACTED_AUDIO_PATH,
@@ -48,9 +52,11 @@ def create_app(state: AppState) -> Flask:
         if extract_audio_from_video(filepath, extracted_audio_path):
             isolated_voice_path = ISOLATED_VOICE_PATH
             if isolate_voice_from_audio(extracted_audio_path, isolated_voice_path):
+                normalize_audio_format(isolated_voice_path, sample_rate=22050, channels=1)
                 state.uploaded_voice_samples = [str(isolated_voice_path)]
                 print("✅ Voice extraction and isolation completed successfully!")
             else:
+                normalize_audio_format(extracted_audio_path, sample_rate=22050, channels=1)
                 state.uploaded_voice_samples = [str(extracted_audio_path)]
                 print("⚠️ Voice isolation failed, using raw extracted audio")
         else:

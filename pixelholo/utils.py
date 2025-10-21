@@ -20,4 +20,4 @@ def setup_upload_directories() -> None:
 
     _reset_directory(config.TEMP_DIR)
     _reset_directory(config.OUTPUTS_DIR)
-    config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _reset_directory(config.CACHE_DIR)
