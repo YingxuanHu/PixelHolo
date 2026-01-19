@@ -109,6 +109,7 @@ def _get_ollama_stream(
         response.raise_for_status()
 
         accumulated_text = ""
+        done_detected = False
         for line in response.iter_lines():
             if not line:
                 continue
@@ -131,17 +132,18 @@ def _get_ollama_stream(
                         # Keep the last one as it might be incomplete
                         accumulated_text = chunks[-1] if chunks else ""
 
-                # Check for done flag
-                if "done" in data and data.get("done", False):
-                    # Yield any remaining text
-                    if accumulated_text.strip():
-                        yield accumulated_text.strip()
-                    break
+                    # Check for done flag (check after processing response)
+                    if "done" in data and data.get("done", False):
+                        # Yield any remaining text
+                        if accumulated_text.strip():
+                            yield accumulated_text.strip()
+                        done_detected = True
+                        break
             except (ValueError, KeyError) as e:
                 continue
 
-        # Yield any remaining text
-        if accumulated_text.strip():
+        # Yield any remaining text only if we didn't already yield it (done wasn't detected)
+        if not done_detected and accumulated_text.strip():
             yield accumulated_text.strip()
 
     except requests.exceptions.RequestException as exc:
