@@ -11,9 +11,12 @@ class AppState:
 
     uploaded_voice_samples: List[str] = field(default_factory=list)
     uploaded_input_video: Optional[str] = None
+    processed_video_path: Optional[str] = None  # Path to processed video (after background removal)
     setup_complete: bool = False
     conversation_history: List[Dict[str, Any]] = field(default_factory=list)
     user_system_prompt: Optional[str] = None
+    tts_model: Optional[Any] = None  # ChatterboxTTS model
+    lip_sync_model: Optional[Any] = None  # LipSync model
 
 
 @dataclass
