@@ -438,13 +438,131 @@
             }
         });
         
+        // Video queue management
+        let videoQueue = [];
+        let isPlayingQueue = false;
+        let currentPipelineId = null;
+        let pollInterval = null;
+        
         // Video player event handlers
         videoPlayer.addEventListener('ended', function() {
-            // Return to idle poster when video ends
-            videoPlayer.poster = posterUrl;
-            videoPlayer.src = '';
-            videoPlayer.load();
+            // Play next video in queue if available
+            playNextInQueue();
         });
+        
+        function playNextInQueue() {
+            if (videoQueue.length > 0) {
+                // Play next video in queue
+                const nextVideo = videoQueue.shift();
+                console.log(`Playing chunk: ${nextVideo}, Remaining in queue: ${videoQueue.length}`);
+                videoPlayer.src = nextVideo;
+                videoPlayer.load();
+                videoPlayer.play().catch(err => {
+                    console.error('Error playing video:', err);
+                    // Try next video if this one fails
+                    playNextInQueue();
+                });
+                isPlayingQueue = true;
+            } else {
+                // Queue is empty, but don't stop polling yet
+                // Only stop if pipeline is done (handled in pollForChunks)
+                isPlayingQueue = false;
+                
+                // Check if pipeline is still running
+                // If not, we'll handle cleanup in pollForChunks when status is DONE
+                if (currentPipelineId === null) {
+                    // Pipeline is done and queue is empty, return to idle
+                    videoPlayer.poster = posterUrl;
+                    videoPlayer.src = '';
+                    videoPlayer.load();
+                    
+                    // Re-enable input
+                    chatInput.disabled = false;
+                    sendBtn.disabled = false;
+                    thinkingIndicator.classList.remove('active');
+                } else {
+                    // Pipeline still running, wait for more chunks
+                    // Don't clear the video - keep the last frame visible while waiting
+                    console.log('Queue empty, waiting for more chunks...');
+                }
+            }
+        }
+        
+        function startPolling(pipelineId) {
+            currentPipelineId = pipelineId;
+            
+            // Clear any existing polling
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+            
+            // Start polling immediately
+            pollForChunks(pipelineId);
+            
+            // Poll every 500ms
+            pollInterval = setInterval(() => {
+                pollForChunks(pipelineId);
+            }, 500);
+        }
+        
+        async function pollForChunks(pipelineId) {
+            try {
+                const response = await fetch(`/stream_status?pipeline_id=${pipelineId}`);
+                const data = await response.json();
+                
+                if (data.status === 'READY') {
+                    // New chunk available, add to queue
+                    videoQueue.push(data.video_url);
+                    console.log(`Chunk received: ${data.video_url}, Queue length: ${videoQueue.length}`);
+                    
+                    // If not currently playing, start playing immediately
+                    // This handles both: initial play and resuming after queue was empty
+                    if (!isPlayingQueue) {
+                        playNextInQueue();
+                    }
+                } else if (data.status === 'WAIT') {
+                    // Still generating, continue polling
+                    // Don't log every time to avoid spam
+                    if (Math.random() < 0.1) {  // Log ~10% of the time
+                        console.log('Waiting for chunks...');
+                    }
+                } else if (data.status === 'DONE') {
+                    // Pipeline complete, stop polling
+                    console.log('Pipeline complete. Final queue length:', videoQueue.length);
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                    currentPipelineId = null;
+                    
+                    // If queue is empty and not playing, re-enable input and return to idle
+                    if (videoQueue.length === 0 && !isPlayingQueue) {
+                        videoPlayer.poster = posterUrl;
+                        videoPlayer.src = '';
+                        videoPlayer.load();
+                        chatInput.disabled = false;
+                        sendBtn.disabled = false;
+                        thinkingIndicator.classList.remove('active');
+                    }
+                    // If there are still chunks in queue, they will play via the 'ended' event
+                } else if (data.status === 'ERROR') {
+                    // Error occurred
+                    console.error('Pipeline error:', data.error);
+                    showError(chatError, data.error || 'Generation failed');
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                    currentPipelineId = null;
+                    chatInput.disabled = false;
+                    sendBtn.disabled = false;
+                    thinkingIndicator.classList.remove('active');
+                }
+            } catch (error) {
+                console.error('Error polling for chunks:', error);
+                // Don't stop polling on network errors, just log
+            }
+        }
         
         async function handleSend() {
             const text = chatInput.value.trim();
@@ -457,6 +575,10 @@
             sendBtn.disabled = true;
             thinkingIndicator.classList.add('active');
             chatError.classList.remove('active');
+            
+            // Clear previous queue
+            videoQueue = [];
+            isPlayingQueue = false;
             
             try {
                 const response = await fetch('/chat', {
@@ -476,22 +598,14 @@
                 // Clear input
                 chatInput.value = '';
                 
-                // Load and play the video
-                videoPlayer.src = data.video_url;
-                videoPlayer.load();
-                videoPlayer.play().catch(err => {
-                    console.error('Error playing video:', err);
-                    showError(chatError, 'Failed to play video. Please try again.');
-                });
+                // Start polling for chunks
+                startPolling(data.pipeline_id);
                 
             } catch (error) {
                 showError(chatError, error.message || 'Failed to generate response. Please try again.');
-            } finally {
-                // Re-enable input
                 chatInput.disabled = false;
                 sendBtn.disabled = false;
                 thinkingIndicator.classList.remove('active');
-                chatInput.focus();
             }
         }
     </script>

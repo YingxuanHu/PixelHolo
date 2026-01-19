@@ -1,5 +1,6 @@
 """Flask web application components."""
 
+import uuid
 from datetime import date
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from .config import (
     UPLOADS_DIR,
     WEIGHTS_DIR,
 )
+from .pipeline import PipelineManager
 from .state import AppState
 from .utils import setup_upload_directories
 
@@ -153,7 +155,7 @@ def create_app(state: AppState) -> Flask:
 
     @app.route("/chat", methods=["POST"])
     def chat():
-        """Process user text input and generate video response."""
+        """Start the streaming pipeline for video generation."""
         data = request.get_json()
         if not data or "text" not in data:
             return jsonify({"error": "Missing text field"}), 400
@@ -171,77 +173,66 @@ def create_app(state: AppState) -> Flask:
         if not state.uploaded_voice_samples:
             return jsonify({"error": "No voice samples available"}), 400
 
-        # Get LLM response
-        print("🧠 Getting response from Ollama...")
-        try:
-            text_to_speak = get_ollama_response(
-                user_text,
-                state.user_system_prompt,
-                state.conversation_history,
-                None,  # base_img (not needed for web)
-                None,  # internet_icon (not needed for web)
-            )
-        except Exception as exc:
-            print(f"❌ LLM generation failed: {exc}")
-            return jsonify({"error": f"Failed to generate LLM response: {exc}"}), 500
+        # Generate unique pipeline ID
+        pipeline_id = str(uuid.uuid4())
 
-        if not text_to_speak:
-            return jsonify({"error": "Ollama returned an empty response"}), 500
+        # Determine which video to use
+        video_to_use = str(state.processed_video_path) if state.processed_video_path else str(
+            state.uploaded_input_video)
+        voice_sample_path = str(state.uploaded_voice_samples[0])
 
-        print(f"🤖 Clone says: {text_to_speak}")
+        # Create and start pipeline
+        pipeline = PipelineManager(
+            tts_model=state.tts_model,
+            lip_sync_model=state.lip_sync_model,
+            video_path=video_to_use,
+            voice_sample_path=voice_sample_path,
+            system_prompt=state.user_system_prompt,
+            conversation_history=state.conversation_history.copy(),
+        )
 
-        # Update conversation history
+        pipeline.start(user_text)
+
+        # Store pipeline
+        state.active_pipelines[pipeline_id] = pipeline
+
+        # Update conversation history with user message
         state.conversation_history.append(
             {"role": "user", "content": user_text})
-        state.conversation_history.append(
-            {"role": "assistant", "content": text_to_speak})
-        if len(state.conversation_history) > 20:
-            state.conversation_history = state.conversation_history[-20:]
-
-        # Generate TTS audio
-        print("🎤 Generating speech with TTS...")
-        try:
-            prompt_audio = Path(state.uploaded_voice_samples[0])
-            wav = state.tts_model.generate(
-                text_to_speak, audio_prompt_path=str(prompt_audio))
-            _save_wav(str(OUTPUT_WAV_PATH), wav, state.tts_model.sr)
-            print("✅ TTS generation completed")
-        except Exception as tts_error:
-            print(f"❌ TTS error: {tts_error}")
-            # Try once more
-            try:
-                wav = state.tts_model.generate(
-                    text_to_speak, audio_prompt_path=str(prompt_audio))
-                _save_wav(str(OUTPUT_WAV_PATH), wav, state.tts_model.sr)
-                print("✅ TTS generation completed (retry)")
-            except Exception as retry_error:
-                return jsonify({"error": f"TTS generation failed: {retry_error}"}), 500
-
-        # Generate lip-synced video
-        print("🎬 Starting lip-sync generation...")
-        try:
-            # Determine which video to use
-            video_to_use = Path(state.processed_video_path) if state.processed_video_path else Path(
-                state.uploaded_input_video)
-
-            state.lip_sync_model.sync(
-                str(video_to_use),
-                str(OUTPUT_WAV_PATH),
-                str(SYNCED_VIDEO_PATH),
-            )
-            print("✅ Lip-sync video generation completed")
-        except Exception as sync_error:
-            print(f"❌ Lip-sync generation failed: {sync_error}")
-            return jsonify({"error": f"Lip-sync generation failed: {sync_error}"}), 500
-
-        # Return video URL
-        video_filename = SYNCED_VIDEO_PATH.name
-        video_url = f"/static/{video_filename}"
 
         return jsonify({
             "success": True,
-            "video_url": video_url
+            "pipeline_id": pipeline_id,
+            "message": "Pipeline started"
         })
+
+    @app.route("/stream_status", methods=["GET"])
+    def stream_status():
+        """Get the status of the streaming pipeline and next available chunk."""
+        pipeline_id = request.args.get("pipeline_id")
+        if not pipeline_id:
+            return jsonify({"error": "Missing pipeline_id parameter"}), 400
+
+        if pipeline_id not in state.active_pipelines:
+            return jsonify({"error": "Pipeline not found"}), 404
+
+        pipeline = state.active_pipelines[pipeline_id]
+        result = pipeline.get_next_chunk()
+
+        # If pipeline is done, update conversation history and clean up
+        if result["status"] == "DONE":
+            # Update conversation history with full assistant response
+            full_response = pipeline.get_full_response()
+            if full_response:
+                state.conversation_history.append(
+                    {"role": "assistant", "content": full_response})
+                if len(state.conversation_history) > 20:
+                    state.conversation_history = state.conversation_history[-20:]
+
+            # Clean up pipeline after a delay (frontend might poll once more)
+            # Could implement cleanup logic here if needed
+
+        return jsonify(result)
 
     @app.route("/static/<filename>")
     def serve_static(filename):
