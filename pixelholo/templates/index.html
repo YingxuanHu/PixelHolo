@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +12,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -21,7 +22,7 @@
             justify-content: center;
             padding: 20px;
         }
-        
+
         .container {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
@@ -32,7 +33,7 @@
             width: 100%;
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        
+
         h1 {
             color: #2d3748;
             font-size: 2.5rem;
@@ -44,7 +45,7 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        
+
         .subtitle {
             text-align: center;
             color: #718096;
@@ -52,18 +53,18 @@
             margin-bottom: 40px;
             font-weight: 400;
         }
-        
+
         /* State 1: Upload */
         .upload-state {
             display: block;
         }
-        
+
         .file-input-wrapper {
             position: relative;
             display: inline-block;
             width: 100%;
         }
-        
+
         .file-input {
             position: absolute;
             opacity: 0;
@@ -71,7 +72,7 @@
             height: 100%;
             cursor: pointer;
         }
-        
+
         .file-input-display {
             display: flex;
             align-items: center;
@@ -85,40 +86,40 @@
             text-align: center;
             min-height: 150px;
         }
-        
+
         .file-input-display:hover {
             background: linear-gradient(135deg, #edf2f7, #e2e8f0);
             border-color: #667eea;
             transform: translateY(-2px);
         }
-        
+
         .file-input-display i {
             font-size: 3rem;
             color: #667eea;
             margin-bottom: 15px;
         }
-        
+
         .file-input-text {
             color: #4a5568;
             font-weight: 600;
             font-size: 1.1rem;
         }
-        
+
         .file-input-subtext {
             color: #718096;
             font-size: 0.9rem;
             margin-top: 8px;
         }
-        
+
         .file-selected .file-input-display {
             background: linear-gradient(135deg, #e6fffa, #b2f5ea);
             border-color: #38b2ac;
         }
-        
+
         .file-selected .file-input-display i {
             color: #38b2ac;
         }
-        
+
         .upload-btn {
             width: 100%;
             background: linear-gradient(135deg, #667eea, #764ba2);
@@ -135,23 +136,23 @@
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
             margin-top: 20px;
         }
-        
+
         .upload-btn:hover:not(:disabled) {
             transform: translateY(-3px);
             box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
         }
-        
+
         .upload-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        
+
         /* State 2: Loading */
         .loading-state {
             display: none;
             text-align: center;
         }
-        
+
         .spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #667eea;
@@ -161,23 +162,28 @@
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
         }
-        
+
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
-        
+
         .loading-text {
             color: #4a5568;
             font-size: 1.3rem;
             font-weight: 600;
         }
-        
+
         /* State 3: Chat */
         .chat-state {
             display: none;
         }
-        
+
         .video-container {
             width: 100%;
             max-width: 640px;
@@ -187,19 +193,19 @@
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
-        
+
         #videoPlayer {
             width: 100%;
             height: auto;
             display: block;
         }
-        
+
         .chat-input-container {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
         }
-        
+
         #chatInput {
             flex: 1;
             padding: 15px 20px;
@@ -210,14 +216,14 @@
             transition: all 0.3s ease;
             background: rgba(255, 255, 255, 0.8);
         }
-        
+
         #chatInput:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
             background: white;
         }
-        
+
         .send-btn {
             padding: 15px 30px;
             background: linear-gradient(135deg, #667eea, #764ba2);
@@ -229,17 +235,17 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        
+
         .send-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
         }
-        
+
         .send-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        
+
         .thinking-indicator {
             display: none;
             text-align: center;
@@ -248,11 +254,11 @@
             margin-top: 10px;
             font-size: 1.1rem;
         }
-        
+
         .thinking-indicator.active {
             display: block;
         }
-        
+
         .error-message {
             display: none;
             background: #fed7d7;
@@ -262,40 +268,41 @@
             margin-bottom: 20px;
             border-left: 4px solid #c53030;
         }
-        
+
         .error-message.active {
             display: block;
         }
-        
+
         .hidden {
             display: none !important;
         }
-        
+
         @media (max-width: 768px) {
             .container {
                 padding: 25px;
                 margin: 10px;
             }
-            
+
             h1 {
                 font-size: 2rem;
             }
-            
+
             .chat-input-container {
                 flex-direction: column;
             }
-            
+
             .send-btn {
                 width: 100%;
             }
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1><i class="fas fa-robot"></i> PixelHolo</h1>
         <p class="subtitle">AI Avatar Chat Interface</p>
-        
+
         <!-- State 1: Upload -->
         <div class="upload-state" id="uploadState">
             <div class="file-input-wrapper">
@@ -311,19 +318,21 @@
             <button class="upload-btn" id="uploadBtn" disabled>Upload Video</button>
             <div class="error-message" id="uploadError"></div>
         </div>
-        
+
         <!-- State 2: Loading -->
         <div class="loading-state" id="loadingState">
             <div class="spinner"></div>
             <div class="loading-text">Initializing Avatar...</div>
         </div>
-        
+
         <!-- State 3: Chat -->
         <div class="chat-state" id="chatState">
             <div class="video-container">
-                <video id="videoPlayer" controls poster="" preload="none">
+                <video id="videoPlayer" controls poster="" preload="auto">
                     Your browser does not support the video tag.
                 </video>
+                <!-- Hidden video element for preloading next chunk -->
+                <video id="preloadPlayer" style="display: none;" preload="auto"></video>
             </div>
             <div class="chat-input-container">
                 <input type="text" id="chatInput" placeholder="Type your message here..." autocomplete="off">
@@ -337,31 +346,32 @@
             <div class="error-message" id="chatError"></div>
         </div>
     </div>
-    
+
     <script>
         // State management
         let currentState = 'upload';
         let posterUrl = '';
-        
+
         const uploadState = document.getElementById('uploadState');
         const loadingState = document.getElementById('loadingState');
         const chatState = document.getElementById('chatState');
         const videoInput = document.getElementById('videoInput');
         const uploadBtn = document.getElementById('uploadBtn');
         const videoPlayer = document.getElementById('videoPlayer');
+        const preloadPlayer = document.getElementById('preloadPlayer');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
         const thinkingIndicator = document.getElementById('thinkingIndicator');
         const uploadError = document.getElementById('uploadError');
         const chatError = document.getElementById('chatError');
-        
+
         function showState(state) {
             uploadState.style.display = state === 'upload' ? 'block' : 'none';
             loadingState.style.display = state === 'loading' ? 'block' : 'none';
             chatState.style.display = state === 'chat' ? 'block' : 'none';
             currentState = state;
         }
-        
+
         function showError(element, message) {
             element.textContent = message;
             element.classList.add('active');
@@ -369,9 +379,9 @@
                 element.classList.remove('active');
             }, 5000);
         }
-        
+
         // File input handling
-        videoInput.addEventListener('change', function(e) {
+        videoInput.addEventListener('change', function (e) {
             const file = e.target.files[0];
             if (file) {
                 const display = document.getElementById('fileDisplay');
@@ -386,39 +396,39 @@
                 uploadBtn.disabled = false;
             }
         });
-        
+
         // Upload button handler
-        uploadBtn.addEventListener('click', async function() {
+        uploadBtn.addEventListener('click', async function () {
             const file = videoInput.files[0];
             if (!file) {
                 showError(uploadError, 'Please select a video file');
                 return;
             }
-            
+
             uploadBtn.disabled = true;
             uploadError.classList.remove('active');
-            
+
             const formData = new FormData();
             formData.append('video', file);
-            
+
             try {
                 showState('loading');
-                
+
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.error || 'Upload failed');
                 }
-                
+
                 // Store poster URL and set it on video player
                 posterUrl = data.poster_url;
                 videoPlayer.poster = posterUrl;
-                
+
                 // Transition to chat state
                 showState('chat');
             } catch (error) {
@@ -427,47 +437,139 @@
                 uploadBtn.disabled = false;
             }
         });
-        
+
         // Send button handler
         sendBtn.addEventListener('click', handleSend);
-        
+
         // Enter key handler
-        chatInput.addEventListener('keypress', function(e) {
+        chatInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter' && !sendBtn.disabled) {
                 handleSend();
             }
         });
-        
+
         // Video queue management
         let videoQueue = [];
         let isPlayingQueue = false;
         let currentPipelineId = null;
         let pollInterval = null;
-        
-        // Video player event handlers
-        videoPlayer.addEventListener('ended', function() {
-            // Play next video in queue if available
-            playNextInQueue();
+        let nextVideoPreloaded = false;
+        let firstVideoStarted = false; // Track if first video has started
+
+        // Preload the next video when current video starts playing
+        videoPlayer.addEventListener('play', function () {
+            // If this is the first video starting, hide thinking indicator and re-enable input
+            if (!firstVideoStarted) {
+                firstVideoStarted = true;
+                thinkingIndicator.classList.remove('active');
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                console.log('First video started - re-enabled input');
+            }
+            preloadNextVideo();
         });
-        
+
+        // Video player event handlers
+        videoPlayer.addEventListener('ended', function () {
+            // Only continue if we have a valid pipeline or queue
+            if (currentPipelineId === null && videoQueue.length === 0) {
+                // Pipeline is done and queue is empty, return to idle
+                isPlayingQueue = false;
+                nextVideoPreloaded = false;
+                preloadPlayer.src = '';
+                preloadPlayer.load();
+                videoPlayer.poster = posterUrl;
+                videoPlayer.src = '';
+                videoPlayer.load();
+                // Input should already be enabled (enabled when first video started)
+                // Just make sure thinking indicator is hidden
+                thinkingIndicator.classList.remove('active');
+                return;
+            }
+
+            // If next video is preloaded, swap it immediately
+            if (nextVideoPreloaded && preloadPlayer.src) {
+                // Swap preloaded video to main player
+                videoPlayer.src = preloadPlayer.src;
+                videoPlayer.currentTime = 0;
+                preloadPlayer.src = '';
+                nextVideoPreloaded = false;
+
+                // Play immediately (should be buffered)
+                videoPlayer.play().catch(err => {
+                    console.error('Error playing preloaded video:', err);
+                    playNextInQueue();
+                });
+
+                // Preload the next one
+                preloadNextVideo();
+            } else {
+                // No preloaded video, load next from queue
+                playNextInQueue();
+            }
+        });
+
+        function preloadNextVideo() {
+            // Only preload if we have a valid pipeline and queue has items
+            if (currentPipelineId === null) {
+                // No active pipeline, don't preload
+                return;
+            }
+
+            // Preload the next video in queue if available
+            if (videoQueue.length > 0 && !nextVideoPreloaded) {
+                const nextVideoUrl = videoQueue[0]; // Peek at first item without removing
+
+                // Clear any existing preload first
+                preloadPlayer.src = '';
+                preloadPlayer.load();
+
+                // Set new source and load
+                preloadPlayer.src = nextVideoUrl;
+                preloadPlayer.load();
+
+                const onCanPlay = function () {
+                    if (preloadPlayer.src === nextVideoUrl) { // Verify it's still the same video
+                        nextVideoPreloaded = true;
+                        console.log('Next video preloaded:', nextVideoUrl);
+                    }
+                };
+
+                const onError = function () {
+                    console.error('Error preloading video:', nextVideoUrl);
+                    nextVideoPreloaded = false;
+                };
+
+                preloadPlayer.addEventListener('canplaythrough', onCanPlay, { once: true });
+                preloadPlayer.addEventListener('error', onError, { once: true });
+            }
+        }
+
         function playNextInQueue() {
             if (videoQueue.length > 0) {
                 // Play next video in queue
                 const nextVideo = videoQueue.shift();
                 console.log(`Playing chunk: ${nextVideo}, Remaining in queue: ${videoQueue.length}`);
+
+                // Reset preload flag
+                nextVideoPreloaded = false;
+                preloadPlayer.src = '';
+
                 videoPlayer.src = nextVideo;
                 videoPlayer.load();
                 videoPlayer.play().catch(err => {
                     console.error('Error playing video:', err);
                     // Try next video if this one fails
-                    playNextInQueue();
+                    setTimeout(() => playNextInQueue(), 100);
                 });
                 isPlayingQueue = true;
             } else {
                 // Queue is empty, but don't stop polling yet
                 // Only stop if pipeline is done (handled in pollForChunks)
                 isPlayingQueue = false;
-                
+                nextVideoPreloaded = false;
+                preloadPlayer.src = '';
+
                 // Check if pipeline is still running
                 // If not, we'll handle cleanup in pollForChunks when status is DONE
                 if (currentPipelineId === null) {
@@ -475,7 +577,7 @@
                     videoPlayer.poster = posterUrl;
                     videoPlayer.src = '';
                     videoPlayer.load();
-                    
+
                     // Re-enable input
                     chatInput.disabled = false;
                     sendBtn.disabled = false;
@@ -487,34 +589,39 @@
                 }
             }
         }
-        
+
         function startPolling(pipelineId) {
             currentPipelineId = pipelineId;
-            
+
             // Clear any existing polling
             if (pollInterval) {
                 clearInterval(pollInterval);
             }
-            
+
             // Start polling immediately
             pollForChunks(pipelineId);
-            
+
             // Poll every 500ms
             pollInterval = setInterval(() => {
                 pollForChunks(pipelineId);
             }, 500);
         }
-        
+
         async function pollForChunks(pipelineId) {
             try {
                 const response = await fetch(`/stream_status?pipeline_id=${pipelineId}`);
                 const data = await response.json();
-                
+
                 if (data.status === 'READY') {
                     // New chunk available, add to queue
                     videoQueue.push(data.video_url);
                     console.log(`Chunk received: ${data.video_url}, Queue length: ${videoQueue.length}`);
-                    
+
+                    // If currently playing, preload this new chunk
+                    if (isPlayingQueue) {
+                        preloadNextVideo();
+                    }
+
                     // If not currently playing, start playing immediately
                     // This handles both: initial play and resuming after queue was empty
                     if (!isPlayingQueue) {
@@ -533,18 +640,22 @@
                         clearInterval(pollInterval);
                         pollInterval = null;
                     }
-                    currentPipelineId = null;
-                    
-                    // If queue is empty and not playing, re-enable input and return to idle
+
+                    // If queue is empty and not playing, return to idle
                     if (videoQueue.length === 0 && !isPlayingQueue) {
+                        currentPipelineId = null;
                         videoPlayer.poster = posterUrl;
                         videoPlayer.src = '';
                         videoPlayer.load();
-                        chatInput.disabled = false;
-                        sendBtn.disabled = false;
+                        preloadPlayer.src = '';
+                        preloadPlayer.load();
+                        nextVideoPreloaded = false;
+                        // Input should already be enabled (enabled when first video started)
+                        // Just make sure thinking indicator is hidden
                         thinkingIndicator.classList.remove('active');
                     }
                     // If there are still chunks in queue, they will play via the 'ended' event
+                    // Input remains enabled so user can type next question while videos play
                 } else if (data.status === 'ERROR') {
                     // Error occurred
                     console.error('Pipeline error:', data.error);
@@ -563,23 +674,47 @@
                 // Don't stop polling on network errors, just log
             }
         }
-        
+
+        function cleanupPreviousQuestion() {
+            // Stop any existing polling
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+
+            // Stop current video playback
+            videoPlayer.pause();
+            videoPlayer.src = '';
+            videoPlayer.load();
+
+            // Clear preload player
+            preloadPlayer.pause();
+            preloadPlayer.src = '';
+            preloadPlayer.load();
+
+            // Clear queue and reset state
+            videoQueue = [];
+            isPlayingQueue = false;
+            nextVideoPreloaded = false;
+            currentPipelineId = null;
+            firstVideoStarted = false; // Reset flag for new question
+        }
+
         async function handleSend() {
             const text = chatInput.value.trim();
             if (!text || sendBtn.disabled) {
                 return;
             }
-            
+
+            // Clean up any previous question's state
+            cleanupPreviousQuestion();
+
             // Disable input and show thinking indicator
             chatInput.disabled = true;
             sendBtn.disabled = true;
             thinkingIndicator.classList.add('active');
             chatError.classList.remove('active');
-            
-            // Clear previous queue
-            videoQueue = [];
-            isPlayingQueue = false;
-            
+
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
@@ -588,19 +723,19 @@
                     },
                     body: JSON.stringify({ text: text })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.error || 'Generation failed');
                 }
-                
+
                 // Clear input
                 chatInput.value = '';
-                
+
                 // Start polling for chunks
                 startPolling(data.pipeline_id);
-                
+
             } catch (error) {
                 showError(chatError, error.message || 'Failed to generate response. Please try again.');
                 chatInput.disabled = false;
@@ -610,4 +745,5 @@
         }
     </script>
 </body>
+
 </html>
