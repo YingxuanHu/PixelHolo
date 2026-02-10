@@ -205,6 +205,47 @@
             gap: 10px;
             margin-bottom: 20px;
         }
+        
+        .mic-btn {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 60px;
+        }
+        
+        .mic-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .mic-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .mic-btn.recording {
+            background: linear-gradient(135deg, #fc8181, #e53e3e);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(252, 129, 129, 0.7);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(252, 129, 129, 0);
+            }
+        }
 
         #chatInput {
             flex: 1;
@@ -335,6 +376,9 @@
                 <video id="preloadPlayer" style="display: none;" preload="auto"></video>
             </div>
             <div class="chat-input-container">
+                <button class="mic-btn" id="micBtn" title="Hold to record">
+                    <i class="fas fa-microphone"></i>
+                </button>
                 <input type="text" id="chatInput" placeholder="Type your message here..." autocomplete="off">
                 <button class="send-btn" id="sendBtn">
                     <i class="fas fa-paper-plane"></i> Send
@@ -361,6 +405,7 @@
         const preloadPlayer = document.getElementById('preloadPlayer');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
+        const micBtn = document.getElementById('micBtn');
         const thinkingIndicator = document.getElementById('thinkingIndicator');
         const uploadError = document.getElementById('uploadError');
         const chatError = document.getElementById('chatError');
@@ -429,6 +474,17 @@
                 posterUrl = data.poster_url;
                 videoPlayer.poster = posterUrl;
 
+                // Enable/disable mic depending on STT availability on server
+                if (data.stt_available === false) {
+                    micBtn.disabled = true;
+                    micBtn.title = data.stt_error
+                        ? `Voice input unavailable: ${data.stt_error}`
+                        : 'Voice input unavailable on server';
+                } else {
+                    micBtn.disabled = false;
+                    micBtn.title = 'Hold to record';
+                }
+
                 // Transition to chat state
                 showState('chat');
             } catch (error) {
@@ -445,6 +501,187 @@
         chatInput.addEventListener('keypress', function (e) {
             if (e.key === 'Enter' && !sendBtn.disabled) {
                 handleSend();
+            }
+        });
+        
+        // Microphone recording functionality
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let stream = null;
+        
+        async function requestMicrophonePermission() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                return true;
+            } catch (error) {
+                console.error('Microphone permission denied:', error);
+                showError(chatError, 'Microphone access denied. Please allow microphone access to use voice input.');
+                return false;
+            }
+        }
+        
+        function startRecording() {
+            if (isRecording) return;
+            
+            audioChunks = [];
+            isRecording = true;
+            micBtn.classList.add('recording');
+            micBtn.innerHTML = '<i class="fas fa-stop"></i>';
+            
+            const options = { mimeType: 'audio/webm' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options.mimeType = 'audio/webm;codecs=opus';
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options.mimeType = 'audio/webm';
+                }
+            }
+            
+            try {
+                mediaRecorder = new MediaRecorder(stream, options);
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await sendAudioToServer(audioBlob);
+                };
+                
+                mediaRecorder.start();
+                console.log('Recording started');
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                stopRecording();
+                showError(chatError, 'Failed to start recording. Please try again.');
+            }
+        }
+        
+        function stopRecording() {
+            if (!isRecording) return;
+            
+            isRecording = false;
+            micBtn.classList.remove('recording');
+            micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            
+            // Stop all tracks
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            console.log('Recording stopped');
+        }
+        
+        async function sendAudioToServer(audioBlob) {
+            // Clean up any previous question's state
+            cleanupPreviousQuestion();
+            
+            // Disable input and show thinking indicator
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+            micBtn.disabled = true;
+            thinkingIndicator.classList.add('active');
+            chatError.classList.remove('active');
+            
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+                
+                const response = await fetch('/chat_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Audio processing failed');
+                }
+                
+                // Show transcription in chat input (optional feedback)
+                if (data.transcription) {
+                    chatInput.value = data.transcription;
+                    console.log('Transcription:', data.transcription);
+                }
+                
+                // Start polling for chunks (same as text input)
+                if (data.pipeline_id) {
+                    startPolling(data.pipeline_id);
+                } else {
+                    throw new Error('No pipeline ID returned');
+                }
+                
+            } catch (error) {
+                console.error('Error sending audio:', error);
+                showError(chatError, error.message || 'Failed to process audio. Please try again.');
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                micBtn.disabled = false;
+                thinkingIndicator.classList.remove('active');
+            }
+        }
+        
+        // Microphone button handlers
+        micBtn.addEventListener('mousedown', async (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+                return;
+            }
+            
+            const hasPermission = await requestMicrophonePermission();
+            if (hasPermission) {
+                startRecording();
+            }
+        });
+        
+        micBtn.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+        
+        micBtn.addEventListener('mouseleave', (e) => {
+            // Stop recording if mouse leaves button while recording
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+        
+        // Touch events for mobile
+        micBtn.addEventListener('touchstart', async (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+                return;
+            }
+            
+            const hasPermission = await requestMicrophonePermission();
+            if (hasPermission) {
+                startRecording();
+            }
+        });
+        
+        micBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+        
+        micBtn.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
             }
         });
 
@@ -464,6 +701,7 @@
                 thinkingIndicator.classList.remove('active');
                 chatInput.disabled = false;
                 sendBtn.disabled = false;
+                micBtn.disabled = false;
                 console.log('First video started - re-enabled input');
             }
             preloadNextVideo();
@@ -525,7 +763,7 @@
                 preloadPlayer.load();
 
                 // Set new source and load
-                preloadPlayer.src = nextVideoUrl;
+                preloadPlayer.src = nextVideoUrl + '?v=' + new Date().getTime();
                 preloadPlayer.load();
 
                 const onCanPlay = function () {
@@ -555,7 +793,7 @@
                 nextVideoPreloaded = false;
                 preloadPlayer.src = '';
 
-                videoPlayer.src = nextVideo;
+                videoPlayer.src = nextVideo + '?v=' + new Date().getTime();
                 videoPlayer.load();
                 videoPlayer.play().catch(err => {
                     console.error('Error playing video:', err);
@@ -581,6 +819,8 @@
                     // Re-enable input
                     chatInput.disabled = false;
                     sendBtn.disabled = false;
+                    micBtn.disabled = false;
+                    micBtn.disabled = false;
                     thinkingIndicator.classList.remove('active');
                 } else {
                     // Pipeline still running, wait for more chunks
@@ -667,6 +907,7 @@
                     currentPipelineId = null;
                     chatInput.disabled = false;
                     sendBtn.disabled = false;
+                    micBtn.disabled = false;
                     thinkingIndicator.classList.remove('active');
                 }
             } catch (error) {

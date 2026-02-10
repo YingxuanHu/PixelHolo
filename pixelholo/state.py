@@ -17,6 +17,8 @@ class AppState:
     user_system_prompt: Optional[str] = None
     tts_model: Optional[Any] = None  # ChatterboxTTS model
     lip_sync_model: Optional[Any] = None  # LipSync model
+    stt_handler: Optional[Any] = None  # STTHandler for speech-to-text
+    stt_last_error: Optional[str] = None  # Last STT init/transcribe error (for UI/debugging)
     active_pipelines: Dict[str, Any] = field(default_factory=dict)  # Store active pipeline instances
 
 

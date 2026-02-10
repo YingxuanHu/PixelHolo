@@ -26,14 +26,39 @@ from .config import (
     OUTPUT_WAV_PATH,
     PROCESSED_VIDEO_PATH,
     SYNCED_VIDEO_PATH,
+    TEMP_DIR,
     UPLOADS_DIR,
     WEIGHTS_DIR,
 )
 from .pipeline import PipelineManager
 from .state import AppState
+from .stt_handler import STTHandler
 from .utils import setup_upload_directories
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
+def _ensure_stt_handler(state: AppState) -> bool:
+    """Initialize STT handler on-demand. Returns True if available."""
+    if state.stt_handler is not None:
+        return True
+
+    stt_device = "cuda" if torch.cuda.is_available() else "cpu"
+    stt_compute_type = "float16" if stt_device == "cuda" else "int8"
+    print(f"🎤 Initializing STT handler on {stt_device.upper()}...")
+    try:
+        state.stt_handler = STTHandler(
+            model_size="base",
+            device=stt_device,
+            compute_type=stt_compute_type,
+        )
+        state.stt_last_error = None
+        print("✅ STT handler initialized")
+        return True
+    except Exception as exc:
+        state.stt_handler = None
+        state.stt_last_error = str(exc)
+        print(f"⚠️ STT handler initialization failed: {exc}")
+        return False
 
 
 def _save_wav(path: str, wav_tensor: torch.Tensor, sample_rate: int) -> None:
@@ -137,6 +162,9 @@ def create_app(state: AppState) -> Flask:
         except Exception as exc:
             return jsonify({"error": f"Failed to load LipSync model: {exc}"}), 500
 
+        # Initialize STT handler
+        _ensure_stt_handler(state)
+
         print("✅ All models initialized successfully")
 
         # Set up system prompt
@@ -150,6 +178,8 @@ def create_app(state: AppState) -> Flask:
         return jsonify({
             "success": True,
             "poster_url": poster_url,
+            "stt_available": state.stt_handler is not None,
+            "stt_error": state.stt_last_error,
             "message": "Video uploaded and models initialized"
         })
 
@@ -233,6 +263,99 @@ def create_app(state: AppState) -> Flask:
             # Could implement cleanup logic here if needed
 
         return jsonify(result)
+
+    @app.route("/chat_audio", methods=["POST"])
+    def chat_audio():
+        """Accept audio file, transcribe it, and start the streaming pipeline."""
+        # Ensure STT handler is available (lazy init)
+        if not _ensure_stt_handler(state):
+            return jsonify({
+                "error": "STT is not available on the server. Install faster-whisper (and ensure ffmpeg is installed), then restart and re-upload.",
+                "detail": state.stt_last_error,
+            }), 500
+
+        # Check if models are initialized
+        if state.tts_model is None or state.lip_sync_model is None:
+            return jsonify({"error": "Models not initialized. Please upload a video first."}), 400
+
+        if not state.uploaded_input_video:
+            return jsonify({"error": "No video uploaded"}), 400
+
+        if not state.uploaded_voice_samples:
+            return jsonify({"error": "No voice samples available"}), 400
+
+        # Get audio file from request
+        audio_file = request.files.get("audio")
+        if not audio_file or not audio_file.filename:
+            return jsonify({"error": "Missing audio file"}), 400
+
+        # Save audio to temporary file
+        temp_dir = TEMP_DIR
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Determine file extension
+        filename = secure_filename(audio_file.filename)
+        file_ext = Path(filename).suffix.lower()
+        if not file_ext:
+            file_ext = ".webm"  # Default to webm for browser recordings
+        
+        # Create temp file
+        temp_audio_path = temp_dir / f"audio_input_{uuid.uuid4()}{file_ext}"
+        audio_file.save(str(temp_audio_path))
+        
+        try:
+            # Transcribe audio
+            print(f"🎤 Transcribing audio file: {temp_audio_path.name}")
+            transcribed_text = state.stt_handler.transcribe(str(temp_audio_path))
+            
+            if not transcribed_text or not transcribed_text.strip():
+                return jsonify({"error": "No speech detected in audio"}), 400
+            
+            print(f"💬 Transcribed text: {transcribed_text}")
+            
+            # Clean up temp file
+            temp_audio_path.unlink()
+            
+            # Generate unique pipeline ID
+            pipeline_id = str(uuid.uuid4())
+            
+            # Determine which video to use
+            video_to_use = str(state.processed_video_path) if state.processed_video_path else str(
+                state.uploaded_input_video)
+            voice_sample_path = str(state.uploaded_voice_samples[0])
+            
+            # Create and start pipeline (reuse existing logic)
+            pipeline = PipelineManager(
+                tts_model=state.tts_model,
+                lip_sync_model=state.lip_sync_model,
+                video_path=video_to_use,
+                voice_sample_path=voice_sample_path,
+                system_prompt=state.user_system_prompt,
+                conversation_history=state.conversation_history.copy(),
+            )
+            
+            pipeline.start(transcribed_text)
+            
+            # Store pipeline
+            state.active_pipelines[pipeline_id] = pipeline
+            
+            # Update conversation history with user message
+            state.conversation_history.append({"role": "user", "content": transcribed_text})
+            
+            return jsonify({
+                "success": True,
+                "status": "processing",
+                "transcription": transcribed_text,
+                "pipeline_id": pipeline_id,
+                "message": "Audio transcribed and pipeline started"
+            })
+            
+        except Exception as exc:
+            # Clean up temp file on error
+            if temp_audio_path.exists():
+                temp_audio_path.unlink()
+            print(f"❌ Error processing audio: {exc}")
+            return jsonify({"error": f"Failed to process audio: {str(exc)}"}), 500
 
     @app.route("/static/<filename>")
     def serve_static(filename):

@@ -20,12 +20,13 @@ pillow~=11.0
 pygame~=2.6
 pyaudio~=0.2.14
 pyserial~=3.5
-rembg~=2.0
+rembg~=2.0 
 requests~=2.32
 scikit-learn~=1.5
 scipy~=1.15
 soundfile~=0.12
 SpeechRecognition~=3.14
+faster-whisper>=1.0.0
 conformer==0.3.2
 diffusers==0.29.0
 resemble-perth==1.0.1
