@@ -185,6 +185,16 @@ python PixelHolo_Lipsync_and_Voice_Cloning.py --no-lipsync
 python PixelHolo_Lipsync_and_Voice_Cloning.py --enable-timing --no-lipsync
 ```
 
+How to tunnel it with cloudflared so that we can access the website throught phone
+---
+```bash
+npx cloudflared tunnel --url http://localhost:5000
+```
+
+then run the program
+```bash
+python PixelHolo_Lipsync_and_Voice_Cloning.py
+```
 
 Final Remarks
 ---

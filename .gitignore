@@ -4,6 +4,7 @@
 venv/
 
 # large/local assets
+runtime/
 models/
 weights/
 cache/
