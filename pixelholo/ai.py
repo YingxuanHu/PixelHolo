@@ -1,4 +1,4 @@
-"""AI interaction utilities including Ollama integration and internet search.""" 
+"""AI interaction utilities including Ollama integration and internet search."""
 
 import json
 import random
@@ -147,7 +147,6 @@ def needs_internet_ml(query: str) -> bool:
 def web_search(query: str, max_results: int = 4) -> str:
     """Perform a Bing search and format the results."""
     try:
-        time.sleep(random.uniform(1, 2))
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -229,7 +228,8 @@ def get_ollama_response(
 
     print("🧠 Getting response from Ollama...")
     if base_img is not None:
-        thinking_icon = cv2.imread(str(THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
+        thinking_icon = cv2.imread(
+            str(THINKING_ICON_PATH), cv2.IMREAD_UNCHANGED)
         if thinking_icon is not None:
             img_with_thinking = overlay_icon(base_img, thinking_icon)
             cv2.imshow(DISPLAY_WINDOW_NAME, img_with_thinking)
@@ -258,7 +258,8 @@ def get_ollama_response(
 
     try:
         with time_operation("Ollama API Call", verbose=True, track_memory=False):
-            response = requests.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
+            response = requests.post(
+                OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
             response.raise_for_status()
             response_data = response.json()
 

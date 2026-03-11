@@ -30,7 +30,7 @@ def _save_wav(path: str, wav_tensor: torch.Tensor, sample_rate: int) -> None:
     sf.write(path, waveform.numpy(), sample_rate, subtype="PCM_16")
 
 
-def _split_into_word_chunks(text: str, words_per_chunk: int = 12) -> list[str]:
+def _split_into_word_chunks(text: str, words_per_chunk: int = 24) -> list[str]:
     """Split text into chunks of approximately equal word count."""
     words = text.split()
     chunks = []
