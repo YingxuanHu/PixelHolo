@@ -99,7 +99,7 @@ def _get_ollama_stream(
         "model": OLLAMA_MODEL,
         "prompt": full_prompt,
         "stream": True,  # Enable streaming
-        "options": {"temperature": 0.7, "num_predict": 150},
+        "options": {"temperature": 0.7, "num_predict": 96},
     }
     headers = {"Content-Type": "application/json"}
 
