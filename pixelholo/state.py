@@ -20,6 +20,7 @@ class AppState:
     stt_handler: Optional[Any] = None  # STTHandler for speech-to-text
     stt_last_error: Optional[str] = None  # Last STT init/transcribe error (for UI/debugging)
     active_pipelines: Dict[str, Any] = field(default_factory=dict)  # Store active pipeline instances
+    voice_conditionals_ready: bool = False  # True once tts.prepare_conditionals has been called for the current voice sample
 
 
 @dataclass

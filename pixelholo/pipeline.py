@@ -1,4 +1,26 @@
-"""Streaming pipeline for real-time video generation."""
+"""Streaming pipeline for real-time video generation.
+
+Latency strategy:
+
+1. Adaptive ramp-up chunking. The first text chunk yielded to TTS is intentionally
+   short (~5 words, broken at the earliest natural punctuation/conjunction) so the
+   first audio+video clip can start playing in roughly one second. Subsequent chunks
+   grow (10 -> 18 -> 24 words) so by the time chunk 1 finishes playing, the heavier
+   later chunks are already rendered. The growth rate keeps each chunk's render
+   time below the previous chunk's playback time, eliminating gaps.
+
+2. Pipeline parallelism between TTS and LipSync. Instead of one worker doing
+   TTS -> LipSync -> ffmpeg serially per chunk, we split into two threads connected
+   by an intermediate audio queue. While the LipSync thread renders chunk N's video,
+   the TTS thread is already producing chunk N+1's audio. On a single GPU this
+   overlaps the GPU-bound and CPU/ffmpeg-bound stages without doubling VRAM usage.
+
+3. Boundary hygiene for chunked TTS. Each generated waveform has leading/trailing
+   silence trimmed (Chatterbox sometimes pads ~50-150 ms) and is generated with a
+   fixed torch seed + cached speaker conditionals so prosody and timbre stay
+   consistent across chunks. This makes the chunked output sound like one
+   continuous sentence instead of stitched pieces.
+"""
 
 import json
 import re
@@ -7,6 +29,8 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Optional
 
+import librosa
+import numpy as np
 import requests
 import soundfile as sf
 import torch
@@ -20,6 +44,22 @@ from .config import (
 )
 
 
+TTS_SEED = 1234
+
+CHUNK_WORD_TARGETS = [5, 10, 18, 24]
+
+CHUNK_WORD_HARD_MAX = [9, 16, 26, 36]
+
+CHUNK_WORD_MIN = [2, 5, 8, 10]
+
+EARLY_BREAK_PUNCT = set(",;:—-")
+HARD_BREAK_PUNCT = set(".!?")
+CONJUNCTIONS = {
+    "and", "but", "so", "because", "then", "or", "yet", "while", "when",
+    "though", "although", "since", "however",
+}
+
+
 def _save_wav(path: str, wav_tensor: torch.Tensor, sample_rate: int) -> None:
     """Persist a waveform tensor to disk using soundfile."""
     waveform = wav_tensor.detach().cpu()
@@ -30,45 +70,118 @@ def _save_wav(path: str, wav_tensor: torch.Tensor, sample_rate: int) -> None:
     sf.write(path, waveform.numpy(), sample_rate, subtype="PCM_16")
 
 
-def _split_into_word_chunks(text: str, words_per_chunk: int = 24) -> list[str]:
-    """Split text into chunks of approximately equal word count."""
-    words = text.split()
-    chunks = []
-    current_chunk = []
-    current_word_count = 0
+def _trim_silence_tensor(wav_tensor: torch.Tensor, sample_rate: int,
+                         top_db: float = 35.0,
+                         pad_ms: float = 30.0) -> torch.Tensor:
+    """Strip leading/trailing silence from a waveform, leaving a small pad.
 
-    for word in words:
-        current_chunk.append(word)
-        current_word_count += 1
+    Chatterbox sometimes prepends/appends short silence to each clip; with N chunks
+    that compounds into audible "stuttering" pauses at every chunk boundary. We trim
+    aggressively (top_db=35 dB) and then re-add a tiny pad so the boundaries don't
+    sound clipped.
+    """
+    waveform = wav_tensor.detach().cpu()
+    if waveform.dim() == 2:
+        # (C, T) -> use first channel for silence detection
+        mono = waveform[0].numpy()
+    else:
+        mono = waveform.numpy()
 
-        # Check if we've reached the target word count
-        # Also check for sentence endings to avoid cutting mid-sentence when possible
-        if current_word_count >= words_per_chunk:
-            # Check if the word ends with sentence punctuation
-            if word and word[-1] in '.!?':
-                # Complete chunk with sentence ending
-                chunks.append(' '.join(current_chunk))
-                current_chunk = []
-                current_word_count = 0
-            elif current_word_count >= words_per_chunk * 1.5:
-                # Force split if we're getting too long
-                chunks.append(' '.join(current_chunk))
-                current_chunk = []
-                current_word_count = 0
+    if mono.size == 0:
+        return wav_tensor
 
-    # Add any remaining words
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
+    try:
+        _, (start, end) = librosa.effects.trim(mono, top_db=top_db)
+    except Exception:
+        return wav_tensor
 
-    return chunks if chunks else [text]
+    if end <= start:
+        return wav_tensor
+
+    pad_samples = int(sample_rate * pad_ms / 1000.0)
+    start = max(0, start - pad_samples)
+    end = min(mono.size, end + pad_samples)
+
+    if waveform.dim() == 2:
+        trimmed = waveform[:, start:end]
+    else:
+        trimmed = waveform[start:end]
+    return trimmed
+
+
+def _strip_word_punct(word: str) -> str:
+    """Return word lower-cased with punctuation stripped, for conjunction checks."""
+    return re.sub(r"[^\w]", "", word).lower()
+
+
+def _try_emit_chunk(buffer_words: list[str], chunk_idx: int) -> Optional[tuple[str, list[str]]]:
+    """If buffer_words is ready to emit a chunk for the given chunk index, return
+    (chunk_text, remaining_words). Otherwise return None.
+
+    Sizing for chunk_idx 0..len(targets)-1 uses the ramp-up tables above; later
+    chunks reuse the final entry. Three preference passes are tried in order:
+
+      1. Earliest hard break (.!?) at >= min_words. This is the most natural place
+         to split, so we take it even if it falls before the soft target.
+      2. For early chunks (idx < 2): earliest soft break (, ; : - --) or
+         conjunction boundary at >= target_words.
+      3. Force-cut at hard_max once the buffer is long enough.
+    """
+    idx = min(chunk_idx, len(CHUNK_WORD_TARGETS) - 1)
+    target = CHUNK_WORD_TARGETS[idx]
+    hard_max = CHUNK_WORD_HARD_MAX[idx]
+    min_words = CHUNK_WORD_MIN[idx]
+    allow_soft_breaks = chunk_idx < 2
+
+    n = len(buffer_words)
+    if n == 0:
+        return None
+
+    search_end = min(n, hard_max)
+
+    # Pass 1: prefer the earliest hard sentence break once we have min_words. We
+    # actually only commit to this if *either* the hard break is past min_words
+    # *and* there are enough trailing words to know we aren't truncating mid-stream.
+    # We require buffer_words to contain at least one word past the candidate so
+    # the LLM has clearly moved on past the punctuation.
+    for i in range(min_words - 1, search_end):
+        word = buffer_words[i]
+        if word and word[-1] in HARD_BREAK_PUNCT and i + 1 < n:
+            chunk_text = " ".join(buffer_words[: i + 1])
+            return chunk_text, buffer_words[i + 1:]
+
+    # Pass 2: at/after target, accept soft breaks or upcoming conjunctions.
+    if allow_soft_breaks:
+        for i in range(target - 1, search_end):
+            word = buffer_words[i]
+            if word and word[-1] in EARLY_BREAK_PUNCT and i + 1 < n:
+                chunk_text = " ".join(buffer_words[: i + 1])
+                return chunk_text, buffer_words[i + 1:]
+            if i + 1 < n:
+                next_clean = _strip_word_punct(buffer_words[i + 1])
+                if next_clean in CONJUNCTIONS and i + 1 >= target - 1:
+                    chunk_text = " ".join(buffer_words[: i + 1])
+                    return chunk_text, buffer_words[i + 1:]
+
+    # Pass 3: force-cut at hard_max regardless of punctuation.
+    if n >= hard_max:
+        chunk_text = " ".join(buffer_words[:hard_max])
+        return chunk_text, buffer_words[hard_max:]
+
+    return None
 
 
 def _get_ollama_stream(
     prompt: str,
     system_prompt: Optional[str],
     conversation_history: Optional[list[dict[str, str]]] = None,
-) -> str:
-    """Get streaming response from Ollama and yield word-based chunks."""
+):
+    """Stream LLM output and yield adaptive-size word chunks.
+
+    Yields chunks aggressively short at the start so the first audio clip can be
+    rendered quickly, then grows toward sentence-sized pieces as the avatar starts
+    speaking. See module docstring for the reasoning.
+    """
     search_context = ""
     if needs_internet_ml(prompt):
         print("🌐 Query requires internet search. Searching...")
@@ -98,7 +211,7 @@ def _get_ollama_stream(
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": full_prompt,
-        "stream": True,  # Enable streaming
+        "stream": True,
         "options": {"temperature": 0.7, "num_predict": 96},
     }
     headers = {"Content-Type": "application/json"}
@@ -108,43 +221,60 @@ def _get_ollama_stream(
             OLLAMA_API_URL, json=payload, headers=headers, stream=True, timeout=60)
         response.raise_for_status()
 
-        accumulated_text = ""
-        done_detected = False
+        word_buffer: list[str] = []
+        partial_token = ""
+        chunk_idx = 0
+
         for line in response.iter_lines():
             if not line:
                 continue
-
             try:
-                json_data = line.decode('utf-8')
-                # Ollama streaming format: each line is a JSON object
-                if json_data.startswith('{'):
-                    data = json.loads(json_data)
-                    if "response" in data:
-                        chunk = data["response"]
-                        accumulated_text += chunk
-
-                        # Check if we have complete word chunks
-                        chunks = _split_into_word_chunks(
-                            accumulated_text, words_per_chunk=12)
-                        # Yield all but the last (incomplete) chunk
-                        for chunk_text in chunks[:-1]:
-                            yield chunk_text
-                        # Keep the last one as it might be incomplete
-                        accumulated_text = chunks[-1] if chunks else ""
-
-                    # Check for done flag (check after processing response)
-                    if "done" in data and data.get("done", False):
-                        # Yield any remaining text
-                        if accumulated_text.strip():
-                            yield accumulated_text.strip()
-                        done_detected = True
-                        break
-            except (ValueError, KeyError) as e:
+                data = json.loads(line.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
                 continue
 
-        # Yield any remaining text only if we didn't already yield it (done wasn't detected)
-        if not done_detected and accumulated_text.strip():
-            yield accumulated_text.strip()
+            chunk = data.get("response", "")
+            done = bool(data.get("done", False))
+
+            if chunk:
+                # Stream tokens may end mid-word (no trailing whitespace). Buffer
+                # the trailing partial token until whitespace arrives so we don't
+                # split words across chunks.
+                combined = partial_token + chunk
+                # Split on whitespace, keeping order; the last item is partial if
+                # combined doesn't end with whitespace.
+                pieces = combined.split()
+                if combined and not combined[-1].isspace():
+                    partial_token = pieces[-1] if pieces else ""
+                    pieces = pieces[:-1]
+                else:
+                    partial_token = ""
+                word_buffer.extend(pieces)
+
+                # Try to emit as many chunks as possible from the buffer
+                while True:
+                    emit = _try_emit_chunk(word_buffer, chunk_idx)
+                    if emit is None:
+                        break
+                    chunk_text, word_buffer = emit
+                    chunk_idx += 1
+                    yield chunk_text
+
+            if done:
+                # Flush any leftover partial token + buffered words as a final chunk
+                if partial_token:
+                    word_buffer.append(partial_token)
+                    partial_token = ""
+                if word_buffer:
+                    yield " ".join(word_buffer)
+                    word_buffer = []
+                return
+
+        # Stream ended without an explicit done=true; flush remainder
+        if partial_token:
+            word_buffer.append(partial_token)
+        if word_buffer:
+            yield " ".join(word_buffer)
 
     except requests.exceptions.RequestException as exc:
         print(f"Error connecting to Ollama API: {exc}")
@@ -155,7 +285,18 @@ def _get_ollama_stream(
 
 
 class PipelineManager:
-    """Manages the streaming pipeline for video generation."""
+    """Orchestrates LLM -> TTS -> LipSync as a 3-stage streaming pipeline.
+
+    Stages run in parallel threads:
+
+        LLM thread       -> text_queue  (one entry per adaptive chunk)
+        TTS thread       -> audio_queue (one entry per generated WAV)
+        LipSync thread   -> video_queue (one entry per rendered MP4)
+
+    The TTS and LipSync stages overlap: while LipSync renders chunk N, TTS is
+    already producing chunk N+1's audio. Order is preserved naturally because each
+    stage is single-threaded and the queues are FIFO.
+    """
 
     def __init__(
         self,
@@ -165,6 +306,7 @@ class PipelineManager:
         voice_sample_path: str,
         system_prompt: Optional[str],
         conversation_history: list[dict[str, str]],
+        voice_conditionals_ready: bool = False,
     ):
         self.tts_model = tts_model
         self.lip_sync_model = lip_sync_model
@@ -172,63 +314,54 @@ class PipelineManager:
         self.voice_sample_path = voice_sample_path
         self.system_prompt = system_prompt
         self.conversation_history = conversation_history
+        # When True, the caller has already invoked tts.prepare_conditionals() with
+        # the voice sample; we can skip passing audio_prompt_path on every TTS call
+        # (which otherwise re-runs speaker encoding ~150 ms per chunk).
+        self.voice_conditionals_ready = voice_conditionals_ready
 
-        # Queues
-        self.text_queue: Queue[str] = Queue()
-        self.video_queue: Queue[str] = Queue()
+        self.text_queue: Queue = Queue()
+        self.audio_queue: Queue = Queue()
+        self.video_queue: Queue = Queue()
 
-        # Threads
         self.llm_thread: Optional[threading.Thread] = None
-        self.generator_thread: Optional[threading.Thread] = None
+        self.tts_thread: Optional[threading.Thread] = None
+        self.lip_thread: Optional[threading.Thread] = None
 
-        # State
         self.is_running = False
         self.is_complete = False
         self.error: Optional[str] = None
         self.chunk_counter = 0
         self.lock = threading.Lock()
-        self.all_sentences = []  # Track all generated sentences for conversation history
+        self.all_sentences: list[str] = []
 
     def start(self, user_text: str) -> None:
-        """Start the pipeline with user input."""
         with self.lock:
             if self.is_running:
                 return
-
             self.is_running = True
             self.is_complete = False
             self.error = None
             self.chunk_counter = 0
 
-            # Clear queues
-            while not self.text_queue.empty():
-                try:
-                    self.text_queue.get_nowait()
-                except Empty:
-                    break
-            while not self.video_queue.empty():
-                try:
-                    self.video_queue.get_nowait()
-                except Empty:
-                    break
+            for q in (self.text_queue, self.audio_queue, self.video_queue):
+                while not q.empty():
+                    try:
+                        q.get_nowait()
+                    except Empty:
+                        break
 
-        # Start LLM thread
         self.llm_thread = threading.Thread(
-            target=self._llm_worker,
-            args=(user_text,),
-            daemon=True
-        )
-        self.llm_thread.start()
+            target=self._llm_worker, args=(user_text,), daemon=True)
+        self.tts_thread = threading.Thread(
+            target=self._tts_worker, daemon=True)
+        self.lip_thread = threading.Thread(
+            target=self._lipsync_worker, daemon=True)
 
-        # Start generator thread
-        self.generator_thread = threading.Thread(
-            target=self._generator_worker,
-            daemon=True
-        )
-        self.generator_thread.start()
+        self.llm_thread.start()
+        self.tts_thread.start()
+        self.lip_thread.start()
 
     def _llm_worker(self, user_text: str) -> None:
-        """Thread 1: Stream LLM responses and put sentences into text_queue."""
         try:
             print(f"💬 User said: {user_text}")
             print("🧠 Getting streaming response from Ollama...")
@@ -240,111 +373,127 @@ class PipelineManager:
             ):
                 if not self.is_running:
                     break
-
                 sentence = remove_emojis(sentence).strip()
                 if sentence:
-                    print(f"📝 Sentence: {sentence}")
+                    print(f"📝 Chunk: {sentence}")
                     self.all_sentences.append(sentence)
                     self.text_queue.put(sentence)
 
-            # Signal end of text stream
-            self.text_queue.put(None)  # Sentinel value
+            self.text_queue.put(None)
             print("✅ LLM streaming complete")
-
         except Exception as exc:
             print(f"❌ LLM worker error: {exc}")
             self.error = str(exc)
             self.is_running = False
+            self.text_queue.put(None)
 
-    def _generator_worker(self) -> None:
-        """Thread 2: Pull sentences, generate audio/video, put filenames into video_queue."""
+    def _generate_tts(self, text: str) -> torch.Tensor:
+        """Generate one TTS waveform with consistent prosody across chunks.
+
+        - Fixed torch seed so the diffusion sampler starts from the same noise
+          distribution each call (prevents pitch/timbre drift between chunks).
+        - Skip audio_prompt_path when conditionals were pre-cached at upload time;
+          this saves ~150 ms per chunk and ensures the same speaker embedding is
+          reused (otherwise it's re-encoded each call).
+        """
+        torch.manual_seed(TTS_SEED)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(TTS_SEED)
+
+        if self.voice_conditionals_ready:
+            return self.tts_model.generate(text)
+        return self.tts_model.generate(
+            text, audio_prompt_path=self.voice_sample_path)
+
+    def _tts_worker(self) -> None:
+        """Pull text chunks, synthesize audio, push (idx, audio_path) to lipsync."""
         try:
             while self.is_running:
                 try:
-                    # Get sentence from queue (with timeout)
-                    sentence = self.text_queue.get(timeout=1.0)
+                    text = self.text_queue.get(timeout=1.0)
+                except Empty:
+                    continue
 
-                    # Check for sentinel (end of stream)
-                    if sentence is None:
-                        print("✅ Generator worker complete")
-                        with self.lock:
-                            self.is_complete = True
-                            self.is_running = False
-                        break
+                if text is None:
+                    self.audio_queue.put(None)
+                    print("✅ TTS worker complete")
+                    break
 
-                    # Generate audio for this sentence
-                    print(f"🎤 Generating TTS for: {sentence[:50]}...")
-                    wav = self.tts_model.generate(
-                        sentence,
-                        audio_prompt_path=self.voice_sample_path
-                    )
-
-                    # Save audio chunk
+                with self.lock:
                     chunk_num = self.chunk_counter
                     self.chunk_counter += 1
-                    audio_path = OUTPUTS_DIR / f"chunk_{chunk_num}_audio.wav"
-                    _save_wav(str(audio_path), wav, self.tts_model.sr)
 
-                    # Generate video chunk
-                    print(f"🎬 Generating video chunk {chunk_num}...")
-                    video_path = OUTPUTS_DIR / f"chunk_{chunk_num}_video.mp4"
+                print(f"🎤 [chunk {chunk_num}] TTS: {text[:60]}{'...' if len(text) > 60 else ''}")
+                wav = self._generate_tts(text)
+                wav = _trim_silence_tensor(wav, self.tts_model.sr)
 
-                    self.lip_sync_model.sync(
-                        self.video_path,
-                        str(audio_path),
-                        str(video_path),
-                    )
+                audio_path = OUTPUTS_DIR / f"chunk_{chunk_num}_audio.wav"
+                _save_wav(str(audio_path), wav, self.tts_model.sr)
 
-                    # Put video filename into queue
-                    video_filename = video_path.name
-                    self.video_queue.put(video_filename)
-                    print(f"✅ Chunk {chunk_num} ready: {video_filename}")
+                self.audio_queue.put((chunk_num, str(audio_path)))
+        except Exception as exc:
+            print(f"❌ TTS worker error: {exc}")
+            self.error = str(exc)
+            self.is_running = False
+            self.audio_queue.put(None)
 
+    def _lipsync_worker(self) -> None:
+        """Pull audio chunks, render lip-synced video, expose to the frontend."""
+        try:
+            while self.is_running:
+                try:
+                    item = self.audio_queue.get(timeout=1.0)
                 except Empty:
-                    # No sentence available yet, continue waiting
                     continue
-                except Exception as exc:
-                    print(f"❌ Generator worker error: {exc}")
-                    self.error = str(exc)
+
+                if item is None:
+                    print("✅ LipSync worker complete")
                     with self.lock:
+                        self.is_complete = True
                         self.is_running = False
                     break
 
+                chunk_num, audio_path = item
+                video_path = OUTPUTS_DIR / f"chunk_{chunk_num}_video.mp4"
+                print(f"🎬 [chunk {chunk_num}] LipSync render...")
+
+                self.lip_sync_model.sync(
+                    self.video_path,
+                    audio_path,
+                    str(video_path),
+                )
+
+                self.video_queue.put(video_path.name)
+                print(f"✅ [chunk {chunk_num}] ready: {video_path.name}")
         except Exception as exc:
-            print(f"❌ Generator worker fatal error: {exc}")
+            print(f"❌ LipSync worker error: {exc}")
             self.error = str(exc)
             with self.lock:
                 self.is_running = False
 
     def get_next_chunk(self) -> dict:
-        """Get the next available video chunk or status."""
         with self.lock:
             if self.error:
                 return {"status": "ERROR", "error": self.error}
 
             if not self.is_running and self.is_complete:
-                # Check if there are any remaining chunks
                 try:
                     video_filename = self.video_queue.get_nowait()
                     return {"status": "READY", "video_url": f"/static/{video_filename}"}
                 except Empty:
                     return {"status": "DONE"}
 
-            # Try to get a chunk
             try:
                 video_filename = self.video_queue.get_nowait()
                 return {"status": "READY", "video_url": f"/static/{video_filename}"}
             except Empty:
                 if self.is_running:
                     return {"status": "WAIT"}
-                else:
-                    return {"status": "DONE"}
+                return {"status": "DONE"}
 
     def get_full_response(self) -> str:
-        """Get the full accumulated response text."""
         return " ".join(self.all_sentences)
 
     def stop(self) -> None:
-        """Stop the pipeline."""
         with self.lock:
             self.is_running = False

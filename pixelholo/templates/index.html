@@ -185,6 +185,7 @@
         }
 
         .video-container {
+            position: relative;
             width: 100%;
             max-width: 640px;
             margin: 0 auto 30px;
@@ -192,12 +193,46 @@
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            /* Default aspect ratio; overridden by JS once we know the source video size. */
+            aspect-ratio: 16 / 9;
         }
 
-        #videoPlayer {
+        .video-player {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: auto;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
             display: block;
+            opacity: 0;
+            transition: opacity 80ms linear;
+            pointer-events: none;
+        }
+
+        .video-player.is-front {
+            opacity: 1;
+            pointer-events: auto;
+            z-index: 2;
+        }
+
+        .video-poster {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+            opacity: 1;
+            transition: opacity 120ms linear;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .video-poster.hidden {
+            opacity: 0;
         }
 
         .chat-input-container {
@@ -368,12 +403,16 @@
 
         <!-- State 3: Chat -->
         <div class="chat-state" id="chatState">
-            <div class="video-container">
-                <video id="videoPlayer" controls poster="" preload="auto">
-                    Your browser does not support the video tag.
-                </video>
-                <!-- Hidden video element for preloading next chunk -->
-                <video id="preloadPlayer" style="display: none;" preload="auto"></video>
+            <div class="video-container" id="videoContainer">
+                <!-- Static poster shown while idle; hidden once a chunk starts playing. -->
+                <img id="videoPoster" class="video-poster" alt="">
+                <!-- Two stacked video players. We never re-assign src on the visible
+                     element; instead we load the next chunk into the back player and
+                     swap which one has the `is-front` class on chunk-end. This keeps
+                     the visible video element fully buffered and avoids the ~500 ms
+                     buffering UI that appears whenever a video element re-loads. -->
+                <video id="videoPlayerA" class="video-player" preload="auto" playsinline></video>
+                <video id="videoPlayerB" class="video-player" preload="auto" playsinline></video>
             </div>
             <div class="chat-input-container">
                 <button class="mic-btn" id="micBtn" title="Hold to record">
@@ -401,8 +440,10 @@
         const chatState = document.getElementById('chatState');
         const videoInput = document.getElementById('videoInput');
         const uploadBtn = document.getElementById('uploadBtn');
-        const videoPlayer = document.getElementById('videoPlayer');
-        const preloadPlayer = document.getElementById('preloadPlayer');
+        const videoContainer = document.getElementById('videoContainer');
+        const videoPoster = document.getElementById('videoPoster');
+        const videoPlayerA = document.getElementById('videoPlayerA');
+        const videoPlayerB = document.getElementById('videoPlayerB');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
         const micBtn = document.getElementById('micBtn');
@@ -470,9 +511,11 @@
                     throw new Error(data.error || 'Upload failed');
                 }
 
-                // Store poster URL and set it on video player
+                // Store poster URL and set it on the static <img> overlay (the
+                // <video> elements are blank until a chunk loads).
                 posterUrl = data.poster_url;
-                videoPlayer.poster = posterUrl;
+                videoPoster.src = posterUrl;
+                videoPoster.classList.remove('hidden');
 
                 // Enable/disable mic depending on STT availability on server
                 if (data.stt_available === false) {
@@ -612,9 +655,9 @@
                     console.log('Transcription:', data.transcription);
                 }
                 
-                // Start polling for chunks (same as text input)
+                // Open SSE stream for chunks (same as text input)
                 if (data.pipeline_id) {
-                    startPolling(data.pipeline_id);
+                    startEventStream(data.pipeline_id);
                 } else {
                     throw new Error('No pipeline ID returned');
                 }
@@ -685,260 +728,260 @@
             }
         });
 
-        // Video queue management
+        // === Two-element opacity-swap player =================================
+        //
+        // We keep two <video> elements stacked in the same container. At any time
+        // ONE of them is "front" (opacity 1, visible, currently playing) and the
+        // other is "back" (opacity 0, preloading the next chunk). Crucially we
+        // never re-assign `src` on the front element while it's visible -- doing
+        // so triggers the browser's buffering UI for ~300-500 ms even if the file
+        // is in HTTP cache. Instead, on the chunk-end event we just swap which
+        // element has the `is-front` CSS class and call play() on the new front
+        // (whose data is already fully loaded). The transition is essentially
+        // instantaneous (~80 ms CSS opacity fade).
+
+        const players = [videoPlayerA, videoPlayerB];
+        let frontIdx = 0;
+        let backIdx = 1;
+        const playerLoaded = [false, false]; // back-element src has finished loading
+        const playerSrc = ['', ''];           // current src per element (for de-dup)
+
         let videoQueue = [];
         let isPlayingQueue = false;
         let currentPipelineId = null;
-        let pollInterval = null;
-        let nextVideoPreloaded = false;
-        let firstVideoStarted = false; // Track if first video has started
+        let eventSource = null;
+        let firstVideoStarted = false;
+        let aspectRatioSet = false;
 
-        // Preload the next video when current video starts playing
-        videoPlayer.addEventListener('play', function () {
-            // If this is the first video starting, hide thinking indicator and re-enable input
-            if (!firstVideoStarted) {
-                firstVideoStarted = true;
-                thinkingIndicator.classList.remove('active');
-                chatInput.disabled = false;
-                sendBtn.disabled = false;
-                micBtn.disabled = false;
-                console.log('First video started - re-enabled input');
-            }
-            preloadNextVideo();
-        });
+        function frontPlayer() { return players[frontIdx]; }
+        function backPlayer() { return players[backIdx]; }
 
-        // Video player event handlers
-        videoPlayer.addEventListener('ended', function () {
-            // Only continue if we have a valid pipeline or queue
-            if (currentPipelineId === null && videoQueue.length === 0) {
-                // Pipeline is done and queue is empty, return to idle
-                isPlayingQueue = false;
-                nextVideoPreloaded = false;
-                preloadPlayer.src = '';
-                preloadPlayer.load();
-                videoPlayer.poster = posterUrl;
-                videoPlayer.src = '';
-                videoPlayer.load();
-                // Input should already be enabled (enabled when first video started)
-                // Just make sure thinking indicator is hidden
-                thinkingIndicator.classList.remove('active');
-                return;
-            }
-
-            // If next video is preloaded, swap it immediately
-            if (nextVideoPreloaded && preloadPlayer.src) {
-                // Swap preloaded video to main player
-                videoPlayer.src = preloadPlayer.src;
-                videoPlayer.currentTime = 0;
-                preloadPlayer.src = '';
-                nextVideoPreloaded = false;
-
-                // Play immediately (should be buffered)
-                videoPlayer.play().catch(err => {
-                    console.error('Error playing preloaded video:', err);
-                    playNextInQueue();
-                });
-
-                // Preload the next one
-                preloadNextVideo();
-            } else {
-                // No preloaded video, load next from queue
-                playNextInQueue();
-            }
-        });
-
-        function preloadNextVideo() {
-            // Only preload if we have a valid pipeline and queue has items
-            if (currentPipelineId === null) {
-                // No active pipeline, don't preload
-                return;
-            }
-
-            // Preload the next video in queue if available
-            if (videoQueue.length > 0 && !nextVideoPreloaded) {
-                const nextVideoUrl = videoQueue[0]; // Peek at first item without removing
-
-                // Clear any existing preload first
-                preloadPlayer.src = '';
-                preloadPlayer.load();
-
-                // Set new source and load
-                preloadPlayer.src = nextVideoUrl + '?v=' + new Date().getTime();
-                preloadPlayer.load();
-
-                const onCanPlay = function () {
-                    if (preloadPlayer.src === nextVideoUrl) { // Verify it's still the same video
-                        nextVideoPreloaded = true;
-                        console.log('Next video preloaded:', nextVideoUrl);
-                    }
-                };
-
-                const onError = function () {
-                    console.error('Error preloading video:', nextVideoUrl);
-                    nextVideoPreloaded = false;
-                };
-
-                preloadPlayer.addEventListener('canplaythrough', onCanPlay, { once: true });
-                preloadPlayer.addEventListener('error', onError, { once: true });
+        function setAspectRatioFromVideo(videoEl) {
+            if (aspectRatioSet) return;
+            if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+                videoContainer.style.aspectRatio = `${videoEl.videoWidth} / ${videoEl.videoHeight}`;
+                aspectRatioSet = true;
             }
         }
 
-        function playNextInQueue() {
-            if (videoQueue.length > 0) {
-                // Play next video in queue
-                const nextVideo = videoQueue.shift();
-                console.log(`Playing chunk: ${nextVideo}, Remaining in queue: ${videoQueue.length}`);
+        function loadIntoBack(url) {
+            // Load `url` into the BACK player. Returns immediately; readiness is
+            // tracked via the canplaythrough listener attached at startup.
+            const idx = backIdx;
+            const el = players[idx];
+            const versioned = url + '?v=' + Date.now();
+            if (playerSrc[idx] === versioned) return;
+            playerLoaded[idx] = false;
+            playerSrc[idx] = versioned;
+            el.src = versioned;
+            el.load();
+        }
 
-                // Reset preload flag
-                nextVideoPreloaded = false;
-                preloadPlayer.src = '';
+        function swapToBack() {
+            // Promote the back player to front: make it visible and play.
+            const newFront = players[backIdx];
+            const oldFront = players[frontIdx];
 
-                videoPlayer.src = nextVideo + '?v=' + new Date().getTime();
-                videoPlayer.load();
-                videoPlayer.play().catch(err => {
-                    console.error('Error playing video:', err);
-                    // Try next video if this one fails
-                    setTimeout(() => playNextInQueue(), 100);
-                });
+            newFront.currentTime = 0;
+            newFront.classList.add('is-front');
+            const playPromise = newFront.play();
+            if (playPromise) {
+                playPromise.catch(err => console.warn('play() rejected:', err));
+            }
+            // Hide poster the first time a real video appears.
+            videoPoster.classList.add('hidden');
+
+            // Remove front-class from previous element after a tick so the fade
+            // covers any single-frame discontinuity.
+            requestAnimationFrame(() => {
+                oldFront.classList.remove('is-front');
+                oldFront.pause();
+            });
+
+            // Roles swap.
+            const oldFrontIdx = frontIdx;
+            frontIdx = backIdx;
+            backIdx = oldFrontIdx;
+            playerLoaded[oldFrontIdx] = false;
+            playerSrc[oldFrontIdx] = '';
+        }
+
+        function startInitialPlayback(url) {
+            // Special case for chunk 0: nothing is on screen yet, so we load into
+            // the *front* element directly and play.
+            const el = frontPlayer();
+            const versioned = url + '?v=' + Date.now();
+            playerSrc[frontIdx] = versioned;
+            el.src = versioned;
+            el.load();
+            el.classList.add('is-front');
+            const p = el.play();
+            if (p) p.catch(err => console.warn('initial play() rejected:', err));
+            videoPoster.classList.add('hidden');
+        }
+
+        function maybeStartNextChunk() {
+            // Called whenever the queue or playback state changes. Decides whether
+            // to start playback (if idle) or just preload (if already playing).
+            if (videoQueue.length === 0) return;
+
+            if (!isPlayingQueue) {
+                const url = videoQueue.shift();
                 isPlayingQueue = true;
+                startInitialPlayback(url);
+                // Eagerly load the next one if we have it.
+                if (videoQueue.length > 0) {
+                    loadIntoBack(videoQueue[0]);
+                }
             } else {
-                // Queue is empty, but don't stop polling yet
-                // Only stop if pipeline is done (handled in pollForChunks)
-                isPlayingQueue = false;
-                nextVideoPreloaded = false;
-                preloadPlayer.src = '';
-
-                // Check if pipeline is still running
-                // If not, we'll handle cleanup in pollForChunks when status is DONE
-                if (currentPipelineId === null) {
-                    // Pipeline is done and queue is empty, return to idle
-                    videoPlayer.poster = posterUrl;
-                    videoPlayer.src = '';
-                    videoPlayer.load();
-
-                    // Re-enable input
-                    chatInput.disabled = false;
-                    sendBtn.disabled = false;
-                    micBtn.disabled = false;
-                    micBtn.disabled = false;
-                    thinkingIndicator.classList.remove('active');
-                } else {
-                    // Pipeline still running, wait for more chunks
-                    // Don't clear the video - keep the last frame visible while waiting
-                    console.log('Queue empty, waiting for more chunks...');
+                // Already playing front: keep the back player loaded with the next
+                // queued chunk so the swap on `ended` is instant.
+                if (!playerLoaded[backIdx] && videoQueue.length > 0) {
+                    loadIntoBack(videoQueue[0]);
                 }
             }
         }
 
-        function startPolling(pipelineId) {
-            currentPipelineId = pipelineId;
-
-            // Clear any existing polling
-            if (pollInterval) {
-                clearInterval(pollInterval);
+        function onChunkEnded() {
+            // Front chunk finished. Promote back if it has the next chunk loaded;
+            // otherwise stay on the last frame and wait for more.
+            if (videoQueue.length === 0 && currentPipelineId === null) {
+                // Pipeline complete and nothing more queued -> idle.
+                isPlayingQueue = false;
+                videoPoster.classList.remove('hidden');
+                frontPlayer().classList.remove('is-front');
+                thinkingIndicator.classList.remove('active');
+                return;
             }
 
-            // Start polling immediately
-            pollForChunks(pipelineId);
-
-            // Poll every 500ms
-            pollInterval = setInterval(() => {
-                pollForChunks(pipelineId);
-            }, 500);
+            if (videoQueue.length > 0) {
+                // Pop the chunk that's (hopefully) loaded into the back player.
+                const expected = videoQueue.shift();
+                const versioned = expected + '?v=';
+                if (!playerSrc[backIdx].startsWith(versioned)) {
+                    // Back player wasn't preloaded with this chunk yet; load now.
+                    // (Happens when the next chunk arrived right as the previous ended.)
+                    loadIntoBack(expected);
+                }
+                swapToBack();
+                // Pre-load the chunk after this one if available.
+                if (videoQueue.length > 0) {
+                    loadIntoBack(videoQueue[0]);
+                }
+            } else {
+                // Queue empty but pipeline still running: linger on the last frame.
+                // Don't drop is-front; the still image of the last frame is shown.
+                console.log('Queue empty, waiting for more chunks...');
+            }
         }
 
-        async function pollForChunks(pipelineId) {
-            try {
-                const response = await fetch(`/stream_status?pipeline_id=${pipelineId}`);
-                const data = await response.json();
+        // Wire up the two players once. Their src changes per chunk but listeners
+        // stay the same.
+        for (let i = 0; i < players.length; i++) {
+            const idx = i;
+            const el = players[idx];
+
+            el.addEventListener('canplaythrough', () => {
+                playerLoaded[idx] = true;
+            });
+
+            el.addEventListener('loadedmetadata', () => {
+                setAspectRatioFromVideo(el);
+            });
+
+            el.addEventListener('play', () => {
+                if (idx !== frontIdx) return;
+                if (!firstVideoStarted) {
+                    firstVideoStarted = true;
+                    thinkingIndicator.classList.remove('active');
+                    chatInput.disabled = false;
+                    sendBtn.disabled = false;
+                    micBtn.disabled = false;
+                }
+            });
+
+            el.addEventListener('ended', () => {
+                if (idx !== frontIdx) return;
+                onChunkEnded();
+            });
+
+            el.addEventListener('error', (e) => {
+                console.error(`Video player ${idx} error:`, el.error, e);
+            });
+        }
+
+        function startEventStream(pipelineId) {
+            currentPipelineId = pipelineId;
+
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            eventSource = new EventSource(`/stream_events?pipeline_id=${pipelineId}`);
+
+            eventSource.onmessage = (ev) => {
+                let data;
+                try { data = JSON.parse(ev.data); }
+                catch (e) { console.warn('Bad SSE payload:', ev.data); return; }
 
                 if (data.status === 'READY') {
-                    // New chunk available, add to queue
                     videoQueue.push(data.video_url);
-                    console.log(`Chunk received: ${data.video_url}, Queue length: ${videoQueue.length}`);
-
-                    // If currently playing, preload this new chunk
-                    if (isPlayingQueue) {
-                        preloadNextVideo();
-                    }
-
-                    // If not currently playing, start playing immediately
-                    // This handles both: initial play and resuming after queue was empty
-                    if (!isPlayingQueue) {
-                        playNextInQueue();
-                    }
-                } else if (data.status === 'WAIT') {
-                    // Still generating, continue polling
-                    // Don't log every time to avoid spam
-                    if (Math.random() < 0.1) {  // Log ~10% of the time
-                        console.log('Waiting for chunks...');
-                    }
+                    console.log(`Chunk received: ${data.video_url}, queue=${videoQueue.length}`);
+                    maybeStartNextChunk();
                 } else if (data.status === 'DONE') {
-                    // Pipeline complete, stop polling
-                    console.log('Pipeline complete. Final queue length:', videoQueue.length);
-                    if (pollInterval) {
-                        clearInterval(pollInterval);
-                        pollInterval = null;
-                    }
-
-                    // If queue is empty and not playing, return to idle
+                    console.log('Pipeline complete. Remaining queue:', videoQueue.length);
+                    if (eventSource) { eventSource.close(); eventSource = null; }
+                    // If nothing is playing and queue empty, mark idle now;
+                    // otherwise the `ended` handler will return us to idle when
+                    // the last chunk finishes.
                     if (videoQueue.length === 0 && !isPlayingQueue) {
                         currentPipelineId = null;
-                        videoPlayer.poster = posterUrl;
-                        videoPlayer.src = '';
-                        videoPlayer.load();
-                        preloadPlayer.src = '';
-                        preloadPlayer.load();
-                        nextVideoPreloaded = false;
-                        // Input should already be enabled (enabled when first video started)
-                        // Just make sure thinking indicator is hidden
+                        videoPoster.classList.remove('hidden');
                         thinkingIndicator.classList.remove('active');
+                    } else {
+                        // Allow `ended` handler to clean up after final chunk.
+                        currentPipelineId = null;
                     }
-                    // If there are still chunks in queue, they will play via the 'ended' event
-                    // Input remains enabled so user can type next question while videos play
                 } else if (data.status === 'ERROR') {
-                    // Error occurred
                     console.error('Pipeline error:', data.error);
                     showError(chatError, data.error || 'Generation failed');
-                    if (pollInterval) {
-                        clearInterval(pollInterval);
-                        pollInterval = null;
-                    }
+                    if (eventSource) { eventSource.close(); eventSource = null; }
                     currentPipelineId = null;
                     chatInput.disabled = false;
                     sendBtn.disabled = false;
                     micBtn.disabled = false;
                     thinkingIndicator.classList.remove('active');
                 }
-            } catch (error) {
-                console.error('Error polling for chunks:', error);
-                // Don't stop polling on network errors, just log
-            }
+                // status === 'WAIT' is just a keepalive ping; ignore.
+            };
+
+            eventSource.onerror = (err) => {
+                console.error('SSE connection error:', err);
+                // EventSource auto-reconnects per the `retry:` field; nothing else to do.
+            };
         }
 
         function cleanupPreviousQuestion() {
-            // Stop any existing polling
-            if (pollInterval) {
-                clearInterval(pollInterval);
-                pollInterval = null;
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
             }
-
-            // Stop current video playback
-            videoPlayer.pause();
-            videoPlayer.src = '';
-            videoPlayer.load();
-
-            // Clear preload player
-            preloadPlayer.pause();
-            preloadPlayer.src = '';
-            preloadPlayer.load();
-
-            // Clear queue and reset state
+            for (const el of players) {
+                el.pause();
+                el.removeAttribute('src');
+                el.load();
+                el.classList.remove('is-front');
+            }
+            playerLoaded[0] = playerLoaded[1] = false;
+            playerSrc[0] = playerSrc[1] = '';
+            frontIdx = 0;
+            backIdx = 1;
             videoQueue = [];
             isPlayingQueue = false;
-            nextVideoPreloaded = false;
             currentPipelineId = null;
-            firstVideoStarted = false; // Reset flag for new question
+            firstVideoStarted = false;
+            videoPoster.classList.remove('hidden');
         }
 
         async function handleSend() {
@@ -974,8 +1017,8 @@
                 // Clear input
                 chatInput.value = '';
 
-                // Start polling for chunks
-                startPolling(data.pipeline_id);
+                // Open SSE stream for chunks
+                startEventStream(data.pipeline_id);
 
             } catch (error) {
                 showError(chatError, error.message || 'Failed to generate response. Please try again.');

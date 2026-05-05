@@ -166,6 +166,19 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
 
     lip = _initialize_models(video_device) if enable_lipsync else None
 
+    # Pre-cache TTS speaker conditionals so per-chunk generate() calls skip the
+    # ~150 ms speaker-encoder pass and reuse a stable speaker embedding across
+    # chunks (prevents timbre drift when a sentence is split across chunks).
+    if state.uploaded_voice_samples:
+        try:
+            print("🎤 Pre-caching TTS speaker conditionals...")
+            tts.prepare_conditionals(state.uploaded_voice_samples[0])
+            state.voice_conditionals_ready = True
+            print("✅ TTS conditionals cached")
+        except Exception as exc:
+            print(f"⚠️ Failed to pre-cache TTS conditionals: {exc}")
+            state.voice_conditionals_ready = False
+
     if not extract_first_frame(video_to_use, config.FIRST_FRAME_PATH):
         raise RuntimeError(
             f"Failed to extract first frame from {video_to_use}.")

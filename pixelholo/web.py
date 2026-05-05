@@ -1,5 +1,7 @@
 """Flask web application components."""
 
+import json
+import time
 import uuid
 from datetime import date
 from pathlib import Path
@@ -7,7 +9,7 @@ from pathlib import Path
 import torch
 import soundfile as sf
 from chatterbox.tts import ChatterboxTTS
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 from lipsync import LipSync
 from werkzeug.utils import secure_filename
 
@@ -143,6 +145,18 @@ def create_app(state: AppState) -> Flask:
 
         state.tts_model = tts
 
+        # Pre-cache speaker conditionals so per-chunk generate() calls skip the
+        # ~150 ms speaker-encoder pass and reuse one stable speaker embedding.
+        state.voice_conditionals_ready = False
+        if state.uploaded_voice_samples:
+            try:
+                print("🎤 Pre-caching TTS speaker conditionals...")
+                tts.prepare_conditionals(state.uploaded_voice_samples[0])
+                state.voice_conditionals_ready = True
+                print("✅ TTS conditionals cached")
+            except Exception as exc:
+                print(f"⚠️ Failed to pre-cache TTS conditionals: {exc}")
+
         # Initialize LipSync model
         video_device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"🎬 Loading LipSync model on {video_device.upper()}...")
@@ -219,6 +233,7 @@ def create_app(state: AppState) -> Flask:
             voice_sample_path=voice_sample_path,
             system_prompt=state.user_system_prompt,
             conversation_history=state.conversation_history.copy(),
+            voice_conditionals_ready=state.voice_conditionals_ready,
         )
 
         pipeline.start(user_text)
@@ -235,6 +250,62 @@ def create_app(state: AppState) -> Flask:
             "pipeline_id": pipeline_id,
             "message": "Pipeline started"
         })
+
+    @app.route("/stream_events", methods=["GET"])
+    def stream_events():
+        """Server-Sent Events stream that pushes chunk-ready notifications.
+
+        Replaces the 500 ms /stream_status polling loop. Eliminates the average
+        ~250 ms gap between when a chunk file is written and when the browser
+        learns about it. The server-side loop checks the pipeline every 50 ms
+        and flushes a `data:` frame the instant a chunk transitions to READY.
+        """
+        pipeline_id = request.args.get("pipeline_id")
+        if not pipeline_id:
+            return jsonify({"error": "Missing pipeline_id parameter"}), 400
+        if pipeline_id not in state.active_pipelines:
+            return jsonify({"error": "Pipeline not found"}), 404
+
+        pipeline = state.active_pipelines[pipeline_id]
+
+        def event_stream():
+            # Drain READY chunks as fast as they arrive; sleep briefly when waiting
+            # so we don't spin a CPU. Total tick latency is ~50 ms vs 500 ms polling.
+            yield "retry: 2000\n\n"
+            poll_interval = 0.05
+            idle_yield_at = 0.5
+            last_yield = time.monotonic()
+            while True:
+                result = pipeline.get_next_chunk()
+                status = result.get("status")
+                if status == "READY":
+                    yield f"data: {json.dumps(result)}\n\n"
+                    last_yield = time.monotonic()
+                    continue
+                if status in ("DONE", "ERROR"):
+                    if status == "DONE":
+                        full_response = pipeline.get_full_response()
+                        if full_response:
+                            state.conversation_history.append(
+                                {"role": "assistant", "content": full_response})
+                            if len(state.conversation_history) > 20:
+                                state.conversation_history = state.conversation_history[-20:]
+                    yield f"data: {json.dumps(result)}\n\n"
+                    return
+                # WAIT: emit a keepalive ping every ~0.5 s so proxies/browsers don't
+                # close the connection, but otherwise stay quiet.
+                now = time.monotonic()
+                if now - last_yield >= idle_yield_at:
+                    yield f"data: {json.dumps({'status': 'WAIT'})}\n\n"
+                    last_yield = now
+                time.sleep(poll_interval)
+
+        headers = {
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable proxy buffering (nginx)
+            "Connection": "keep-alive",
+        }
+        return Response(event_stream(), mimetype="text/event-stream", headers=headers)
 
     @app.route("/stream_status", methods=["GET"])
     def stream_status():
@@ -332,6 +403,7 @@ def create_app(state: AppState) -> Flask:
                 voice_sample_path=voice_sample_path,
                 system_prompt=state.user_system_prompt,
                 conversation_history=state.conversation_history.copy(),
+                voice_conditionals_ready=state.voice_conditionals_ready,
             )
             
             pipeline.start(transcribed_text)
