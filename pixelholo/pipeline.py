@@ -212,7 +212,7 @@ def _get_ollama_stream(
         "model": OLLAMA_MODEL,
         "prompt": full_prompt,
         "stream": True,
-        "options": {"temperature": 0.7, "num_predict": 96},
+        "options": {"temperature": 0.7, "num_predict": 196},
     }
     headers = {"Content-Type": "application/json"}
 
@@ -423,7 +423,8 @@ class PipelineManager:
                     chunk_num = self.chunk_counter
                     self.chunk_counter += 1
 
-                print(f"🎤 [chunk {chunk_num}] TTS: {text[:60]}{'...' if len(text) > 60 else ''}")
+                print(
+                    f"🎤 [chunk {chunk_num}] TTS: {text[:60]}{'...' if len(text) > 60 else ''}")
                 wav = self._generate_tts(text)
                 wav = _trim_silence_tensor(wav, self.tts_model.sr)
 
