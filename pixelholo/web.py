@@ -32,12 +32,14 @@ from .config import (
     UPLOADS_DIR,
     WEIGHTS_DIR,
 )
+from . import avatars as avatars_store
 from .pipeline import PipelineManager
 from .state import AppState
 from .stt_handler import STTHandler
 from .utils import setup_upload_directories
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
 
 def _ensure_stt_handler(state: AppState) -> bool:
     """Initialize STT handler on-demand. Returns True if available."""
@@ -63,6 +65,70 @@ def _ensure_stt_handler(state: AppState) -> bool:
         return False
 
 
+def _init_ml_stack(state: AppState) -> tuple[dict, int]:
+    """Load TTS, LipSync, and STT after media paths and poster exist on disk."""
+    print("🚀 Initializing models...")
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"🚀 Loading Chatterbox-TTS model on {device.upper()}...")
+    try:
+        tts = ChatterboxTTS.from_pretrained(device=device)
+    except RuntimeError as exc:
+        if device == "cuda":
+            print(
+                f"⚠️ CUDA TTS load failed ({exc}). Falling back to CPU for Chatterbox-TTS.")
+            device = "cpu"
+            tts = ChatterboxTTS.from_pretrained(device=device)
+        else:
+            return {"error": f"Failed to load TTS model: {exc}"}, 500
+
+    state.tts_model = tts
+
+    state.voice_conditionals_ready = False
+    if state.uploaded_voice_samples:
+        try:
+            print("🎤 Pre-caching TTS speaker conditionals...")
+            tts.prepare_conditionals(state.uploaded_voice_samples[0])
+            state.voice_conditionals_ready = True
+            print("✅ TTS conditionals cached")
+        except Exception as exc:
+            print(f"⚠️ Failed to pre-cache TTS conditionals: {exc}")
+
+    video_device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"🎬 Loading LipSync model on {video_device.upper()}...")
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        lip = LipSync(
+            model="wav2lip",
+            checkpoint_path=str(WEIGHTS_DIR / "wav2lip_gan.pth"),
+            nosmooth=True,
+            device=video_device,
+            cache_dir=str(CACHE_DIR),
+            img_size=96,
+            save_cache=True,
+        )
+        state.lip_sync_model = lip
+        print("✅ LipSync model loaded")
+    except Exception as exc:
+        return {"error": f"Failed to load LipSync model: {exc}"}, 500
+
+    _ensure_stt_handler(state)
+
+    print("✅ All models initialized successfully")
+
+    today_date = date.today().strftime("%B %d, %Y")
+    date_prompt = f"For your information, today's date is {today_date}."
+    state.user_system_prompt = f"{BASE_SYSTEM_PROMPT} {date_prompt}"
+
+    return {
+        "success": True,
+        "poster_url": f"/static/{FIRST_FRAME_PATH.name}",
+        "stt_available": state.stt_handler is not None,
+        "stt_error": state.stt_last_error,
+        "message": "Models initialized",
+    }, 200
+
+
 def _save_wav(path: str, wav_tensor: torch.Tensor, sample_rate: int) -> None:
     """Persist a waveform tensor to disk using soundfile."""
     waveform = wav_tensor.detach().cpu()
@@ -85,6 +151,8 @@ def create_app(state: AppState) -> Flask:
     @app.route("/upload", methods=["POST"])
     def upload():
         """Accept video file upload, save to runtime folder, and trigger model initialization."""
+        state.active_pipelines.clear()
+        state.conversation_history.clear()
         state.uploaded_voice_samples = []
         setup_upload_directories()
 
@@ -126,76 +194,71 @@ def create_app(state: AppState) -> Flask:
         if not extract_first_frame(video_to_use, FIRST_FRAME_PATH):
             return jsonify({"error": "Failed to extract first frame"}), 400
 
-        # Initialize models
-        print("🚀 Initializing models...")
+        body, code = _init_ml_stack(state)
+        if code == 200:
+            body = {**body, "message": "Video uploaded and models initialized"}
+        return jsonify(body), code
 
-        # Initialize TTS model
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"🚀 Loading Chatterbox-TTS model on {device.upper()}...")
+    @app.get("/avatars")
+    def list_saved_avatars_route():
+        return jsonify({"avatars": avatars_store.list_saved_avatars()})
+
+    @app.get("/avatars/<avatar_id>/poster.jpg")
+    def serve_saved_avatar_poster(avatar_id):
         try:
-            tts = ChatterboxTTS.from_pretrained(device=device)
-        except RuntimeError as exc:
-            if device == "cuda":
-                print(
-                    f"⚠️ CUDA TTS load failed ({exc}). Falling back to CPU for Chatterbox-TTS.")
-                device = "cpu"
-                tts = ChatterboxTTS.from_pretrained(device=device)
-            else:
-                return jsonify({"error": f"Failed to load TTS model: {exc}"}), 500
+            root = avatars_store.avatar_dir(avatar_id)
+        except ValueError:
+            return jsonify({"error": "Invalid avatar id"}), 400
+        path = root / avatars_store.POSTER_FILENAME
+        if not path.is_file():
+            return jsonify({"error": "Not found"}), 404
+        return send_from_directory(str(root), avatars_store.POSTER_FILENAME)
 
-        state.tts_model = tts
-
-        # Pre-cache speaker conditionals so per-chunk generate() calls skip the
-        # ~150 ms speaker-encoder pass and reuse one stable speaker embedding.
-        state.voice_conditionals_ready = False
-        if state.uploaded_voice_samples:
-            try:
-                print("🎤 Pre-caching TTS speaker conditionals...")
-                tts.prepare_conditionals(state.uploaded_voice_samples[0])
-                state.voice_conditionals_ready = True
-                print("✅ TTS conditionals cached")
-            except Exception as exc:
-                print(f"⚠️ Failed to pre-cache TTS conditionals: {exc}")
-
-        # Initialize LipSync model
-        video_device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"🎬 Loading LipSync model on {video_device.upper()}...")
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    @app.post("/avatars/save")
+    def save_avatar_route():
+        if state.tts_model is None or state.lip_sync_model is None:
+            return jsonify({"error": "No active avatar to save. Upload or load one first."}), 400
+        data = request.get_json(silent=True) or {}
+        name = data.get("name", "")
         try:
-            lip = LipSync(
-                model="wav2lip",
-                checkpoint_path=str(WEIGHTS_DIR / "wav2lip_gan.pth"),
-                nosmooth=True,
-                device=video_device,
-                cache_dir=str(CACHE_DIR),
-                img_size=96,
-                save_cache=True,
-            )
-            state.lip_sync_model = lip
-            print("✅ LipSync model loaded")
-        except Exception as exc:
-            return jsonify({"error": f"Failed to load LipSync model: {exc}"}), 500
+            meta = avatars_store.save_avatar_from_state(state, str(name))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": f"Failed to save avatar: {exc}"}), 500
+        return jsonify({"success": True, **meta})
 
-        # Initialize STT handler
-        _ensure_stt_handler(state)
+    @app.post("/avatars/load")
+    def load_avatar_route():
+        data = request.get_json(silent=True) or {}
+        avatar_id = data.get("id", "")
+        if not avatar_id or not isinstance(avatar_id, str):
+            return jsonify({"error": "Missing id"}), 400
+        state.active_pipelines.clear()
+        state.conversation_history.clear()
+        try:
+            avatars_store.apply_saved_avatar_to_state(state, avatar_id)
+        except ValueError:
+            return jsonify({"error": "Invalid avatar id"}), 400
+        except FileNotFoundError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except OSError as exc:
+            return jsonify({"error": f"Failed to restore files: {exc}"}), 500
 
-        print("✅ All models initialized successfully")
+        body, code = _init_ml_stack(state)
+        if code == 200:
+            body = {**body, "message": "Saved avatar loaded"}
+        return jsonify(body), code
 
-        # Set up system prompt
-        today_date = date.today().strftime("%B %d, %Y")
-        date_prompt = f"For your information, today's date is {today_date}."
-        state.user_system_prompt = f"{BASE_SYSTEM_PROMPT} {date_prompt}"
-
-        # Get poster image URL
-        poster_url = f"/static/{FIRST_FRAME_PATH.name}"
-
-        return jsonify({
-            "success": True,
-            "poster_url": poster_url,
-            "stt_available": state.stt_handler is not None,
-            "stt_error": state.stt_last_error,
-            "message": "Video uploaded and models initialized"
-        })
+    @app.delete("/avatars/<avatar_id>")
+    def delete_avatar_route(avatar_id):
+        try:
+            avatars_store.delete_saved_avatar(avatar_id)
+        except ValueError:
+            return jsonify({"error": "Invalid avatar id"}), 400
+        except FileNotFoundError:
+            return jsonify({"error": "Avatar not found"}), 404
+        return jsonify({"success": True})
 
     @app.route("/chat", methods=["POST"])
     def chat():

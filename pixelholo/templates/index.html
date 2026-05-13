@@ -147,6 +147,154 @@
             cursor: not-allowed;
         }
 
+        .btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+            padding: 12px 20px;
+            border: 2px solid #cbd5e0;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            border-color: #667eea;
+            color: #667eea;
+            background: #f7fafc;
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .saved-avatars-block {
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .saved-avatars-heading {
+            color: #2d3748;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .saved-avatars-hint {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-bottom: 14px;
+        }
+
+        .saved-avatar-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 14px;
+        }
+
+        .saved-avatar-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            text-align: center;
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .saved-avatar-card:hover {
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .saved-avatar-card img {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            display: block;
+            background: #000;
+        }
+
+        .saved-avatar-card .card-label {
+            padding: 8px 6px 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #2d3748;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .saved-avatar-card .card-actions {
+            display: flex;
+            gap: 6px;
+            padding: 6px 8px 10px;
+            justify-content: center;
+        }
+
+        .btn-tiny {
+            padding: 6px 10px;
+            font-size: 0.75rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-load {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            flex: 1;
+        }
+
+        .btn-load:hover:not(:disabled) {
+            opacity: 0.92;
+        }
+
+        .btn-delete {
+            background: #fff5f5;
+            color: #c53030;
+            border: 1px solid #feb2b2;
+        }
+
+        .btn-delete:hover {
+            background: #fed7d7;
+        }
+
+        .avatar-persist-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .avatar-persist-row input {
+            flex: 1;
+            min-width: 160px;
+            padding: 12px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 0.95rem;
+        }
+
+        .avatar-persist-row input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .save-avatar-status {
+            font-size: 0.85rem;
+            color: #38a169;
+            min-height: 1.2em;
+        }
+
+        .save-avatar-status.error {
+            color: #c53030;
+        }
+
         /* State 2: Loading */
         .loading-state {
             display: none;
@@ -393,6 +541,12 @@
             </div>
             <button class="upload-btn" id="uploadBtn" disabled>Upload Video</button>
             <div class="error-message" id="uploadError"></div>
+
+            <div class="saved-avatars-block" id="savedAvatarsBlock">
+                <h3 class="saved-avatars-heading">Saved avatars</h3>
+                <p class="saved-avatars-hint" id="savedAvatarsEmpty">None yet. After you chat with an avatar, give it a name and save it below the video.</p>
+                <div class="saved-avatar-grid" id="savedAvatarsGrid"></div>
+            </div>
         </div>
 
         <!-- State 2: Loading -->
@@ -413,6 +567,11 @@
                      buffering UI that appears whenever a video element re-loads. -->
                 <video id="videoPlayerA" class="video-player" preload="auto" playsinline></video>
                 <video id="videoPlayerB" class="video-player" preload="auto" playsinline></video>
+            </div>
+            <div class="avatar-persist-row">
+                <input type="text" id="saveAvatarNameInput" placeholder="Name this avatar to save…" maxlength="120" autocomplete="off">
+                <button type="button" class="btn-secondary" id="saveAvatarBtn">Save avatar</button>
+                <span class="save-avatar-status" id="saveAvatarStatus"></span>
             </div>
             <div class="chat-input-container">
                 <button class="mic-btn" id="micBtn" title="Hold to record">
@@ -450,6 +609,11 @@
         const thinkingIndicator = document.getElementById('thinkingIndicator');
         const uploadError = document.getElementById('uploadError');
         const chatError = document.getElementById('chatError');
+        const savedAvatarsGrid = document.getElementById('savedAvatarsGrid');
+        const savedAvatarsEmpty = document.getElementById('savedAvatarsEmpty');
+        const saveAvatarNameInput = document.getElementById('saveAvatarNameInput');
+        const saveAvatarBtn = document.getElementById('saveAvatarBtn');
+        const saveAvatarStatus = document.getElementById('saveAvatarStatus');
 
         function showState(state) {
             uploadState.style.display = state === 'upload' ? 'block' : 'none';
@@ -457,6 +621,113 @@
             chatState.style.display = state === 'chat' ? 'block' : 'none';
             currentState = state;
         }
+
+        function applySessionReady(data) {
+            posterUrl = data.poster_url;
+            videoPoster.src = posterUrl;
+            videoPoster.classList.remove('hidden');
+            if (data.stt_available === false) {
+                micBtn.disabled = true;
+                micBtn.title = data.stt_error
+                    ? `Voice input unavailable: ${data.stt_error}`
+                    : 'Voice input unavailable on server';
+            } else {
+                micBtn.disabled = false;
+                micBtn.title = 'Hold to record';
+            }
+            showState('chat');
+        }
+
+        async function refreshSavedAvatars() {
+            if (!savedAvatarsGrid || !savedAvatarsEmpty) return;
+            try {
+                const response = await fetch('/avatars');
+                const data = await response.json();
+                const list = data.avatars || [];
+                savedAvatarsGrid.innerHTML = '';
+                if (list.length === 0) {
+                    savedAvatarsEmpty.classList.remove('hidden');
+                    return;
+                }
+                savedAvatarsEmpty.classList.add('hidden');
+                for (const av of list) {
+                    const card = document.createElement('div');
+                    card.className = 'saved-avatar-card';
+                    const img = document.createElement('img');
+                    img.src = av.poster_url + '?t=' + Date.now();
+                    img.alt = av.name || 'Avatar';
+                    const label = document.createElement('div');
+                    label.className = 'card-label';
+                    label.textContent = av.name || av.id.slice(0, 8);
+                    const actions = document.createElement('div');
+                    actions.className = 'card-actions';
+                    const loadBtn = document.createElement('button');
+                    loadBtn.type = 'button';
+                    loadBtn.className = 'btn-tiny btn-load';
+                    loadBtn.textContent = 'Load';
+                    loadBtn.addEventListener('click', () => loadSavedAvatar(av.id));
+                    const delBtn = document.createElement('button');
+                    delBtn.type = 'button';
+                    delBtn.className = 'btn-tiny btn-delete';
+                    delBtn.title = 'Delete saved avatar';
+                    delBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    delBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteSavedAvatar(av.id, av.name || av.id.slice(0, 8));
+                    });
+                    actions.appendChild(loadBtn);
+                    actions.appendChild(delBtn);
+                    card.appendChild(img);
+                    card.appendChild(label);
+                    card.appendChild(actions);
+                    savedAvatarsGrid.appendChild(card);
+                }
+            } catch (err) {
+                console.warn('Could not list saved avatars', err);
+            }
+        }
+
+        async function loadSavedAvatar(avatarId) {
+            uploadError.classList.remove('active');
+            try {
+                showState('loading');
+                const response = await fetch('/avatars/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: avatarId }),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Load failed');
+                }
+                applySessionReady(data);
+            } catch (error) {
+                showState('upload');
+                showError(uploadError, error.message || 'Failed to load saved avatar.');
+            }
+        }
+
+        async function deleteSavedAvatar(avatarId, displayName) {
+            if (!confirm(`Delete saved avatar "${displayName}"? This cannot be undone.`)) {
+                return;
+            }
+            try {
+                const response = await fetch('/avatars/' + encodeURIComponent(avatarId), {
+                    method: 'DELETE',
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Delete failed');
+                }
+                await refreshSavedAvatars();
+            } catch (error) {
+                showError(uploadError, error.message || 'Failed to delete avatar.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshSavedAvatars();
+        });
 
         function showError(element, message) {
             element.textContent = message;
@@ -511,29 +782,46 @@
                     throw new Error(data.error || 'Upload failed');
                 }
 
-                // Store poster URL and set it on the static <img> overlay (the
-                // <video> elements are blank until a chunk loads).
-                posterUrl = data.poster_url;
-                videoPoster.src = posterUrl;
-                videoPoster.classList.remove('hidden');
-
-                // Enable/disable mic depending on STT availability on server
-                if (data.stt_available === false) {
-                    micBtn.disabled = true;
-                    micBtn.title = data.stt_error
-                        ? `Voice input unavailable: ${data.stt_error}`
-                        : 'Voice input unavailable on server';
-                } else {
-                    micBtn.disabled = false;
-                    micBtn.title = 'Hold to record';
-                }
-
-                // Transition to chat state
-                showState('chat');
+                applySessionReady(data);
+                await refreshSavedAvatars();
             } catch (error) {
                 showState('upload');
                 showError(uploadError, error.message || 'Failed to upload video. Please try again.');
                 uploadBtn.disabled = false;
+            }
+        });
+
+        saveAvatarBtn.addEventListener('click', async function () {
+            const name = (saveAvatarNameInput.value || '').trim();
+            if (!name) {
+                saveAvatarStatus.textContent = 'Enter a name first.';
+                saveAvatarStatus.classList.add('error');
+                setTimeout(() => {
+                    saveAvatarStatus.textContent = '';
+                    saveAvatarStatus.classList.remove('error');
+                }, 4000);
+                return;
+            }
+            saveAvatarBtn.disabled = true;
+            saveAvatarStatus.textContent = '';
+            saveAvatarStatus.classList.remove('error');
+            try {
+                const response = await fetch('/avatars/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Save failed');
+                }
+                saveAvatarStatus.textContent = 'Saved.';
+                await refreshSavedAvatars();
+            } catch (error) {
+                saveAvatarStatus.textContent = error.message || 'Save failed.';
+                saveAvatarStatus.classList.add('error');
+            } finally {
+                saveAvatarBtn.disabled = false;
             }
         });
 

@@ -18,6 +18,7 @@ INPUT_VIDEO_DIR = UPLOADS_DIR / "video"
 OUTPUTS_DIR = RUNTIME_DIR / "outputs"
 CACHE_DIR = RUNTIME_DIR / "cache"
 TEMP_DIR = RUNTIME_DIR / "temp"
+SAVED_AVATARS_DIR = RUNTIME_DIR / "saved_avatars"
 
 # Runtime files
 EXTRACTED_AUDIO_NAME = "extracted_audio.wav"
