@@ -22,6 +22,24 @@ class AppState:
     active_pipelines: Dict[str, Any] = field(default_factory=dict)  # Store active pipeline instances
     voice_conditionals_ready: bool = False  # True once tts.prepare_conditionals has been called for the current voice sample
 
+    # Ollama (streaming) — see pipeline._get_ollama_stream
+    llm_temperature: float = 0.7
+    avatar_emotion: str = ""  # angry, happy, sad, scared, disgust, or empty
+    avatar_emotion_intensity: float = 0.5  # 0–1 strength when an emotion is selected
+    avatar_personality: str = ""  # Extra instructions appended to system prompt
+
+    # Chatterbox generate() — see chatterbox.tts.ChatterboxTTS.generate
+    tts_exaggeration: float = 0.5
+    tts_temperature: float = 0.8
+    tts_cfg_weight: float = 0.5
+    tts_repetition_penalty: float = 1.2
+
+    # Display hints for the web UI (playback + CSS filters on the video stack)
+    video_playback_rate: float = 1.0
+    color_brightness: float = 1.0
+    color_contrast: float = 1.0
+    color_saturation: float = 1.0
+
 
 @dataclass
 class TrackingState:

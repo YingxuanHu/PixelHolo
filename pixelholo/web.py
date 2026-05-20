@@ -34,6 +34,12 @@ from .config import (
 )
 from . import avatars as avatars_store
 from .pipeline import PipelineManager
+from .session_settings import (
+    apply_prefs_from_avatar_meta,
+    build_personality_addon,
+    merge_session_settings,
+    settings_payload,
+)
 from .state import AppState
 from .stt_handler import STTHandler
 from .utils import setup_upload_directories
@@ -88,7 +94,10 @@ def _init_ml_stack(state: AppState) -> tuple[dict, int]:
     if state.uploaded_voice_samples:
         try:
             print("🎤 Pre-caching TTS speaker conditionals...")
-            tts.prepare_conditionals(state.uploaded_voice_samples[0])
+            tts.prepare_conditionals(
+                state.uploaded_voice_samples[0],
+                exaggeration=state.tts_exaggeration,
+            )
             state.voice_conditionals_ready = True
             print("✅ TTS conditionals cached")
         except Exception as exc:
@@ -126,6 +135,7 @@ def _init_ml_stack(state: AppState) -> tuple[dict, int]:
         "stt_available": state.stt_handler is not None,
         "stt_error": state.stt_last_error,
         "message": "Models initialized",
+        "settings": settings_payload(state),
     }, 200
 
 
@@ -199,6 +209,20 @@ def create_app(state: AppState) -> Flask:
             body = {**body, "message": "Video uploaded and models initialized"}
         return jsonify(body), code
 
+    @app.get("/session/settings")
+    def get_session_settings():
+        return jsonify(settings_payload(state))
+
+    @app.get("/session/transcript")
+    def get_session_transcript():
+        return jsonify({"messages": state.conversation_history})
+
+    @app.post("/session/settings")
+    def post_session_settings():
+        data = request.get_json(silent=True) or {}
+        warnings = merge_session_settings(state, data)
+        return jsonify({"success": True, "settings": settings_payload(state), "warnings": warnings})
+
     @app.get("/avatars")
     def list_saved_avatars_route():
         return jsonify({"avatars": avatars_store.list_saved_avatars()})
@@ -237,7 +261,8 @@ def create_app(state: AppState) -> Flask:
         state.active_pipelines.clear()
         state.conversation_history.clear()
         try:
-            avatars_store.apply_saved_avatar_to_state(state, avatar_id)
+            meta = avatars_store.apply_saved_avatar_to_state(state, avatar_id)
+            apply_prefs_from_avatar_meta(state, meta)
         except ValueError:
             return jsonify({"error": "Invalid avatar id"}), 400
         except FileNotFoundError as exc:
@@ -297,6 +322,12 @@ def create_app(state: AppState) -> Flask:
             system_prompt=state.user_system_prompt,
             conversation_history=state.conversation_history.copy(),
             voice_conditionals_ready=state.voice_conditionals_ready,
+            llm_temperature=state.llm_temperature,
+            personality_addon=build_personality_addon(state),
+            tts_exaggeration=state.tts_exaggeration,
+            tts_temperature=state.tts_temperature,
+            tts_cfg_weight=state.tts_cfg_weight,
+            tts_repetition_penalty=state.tts_repetition_penalty,
         )
 
         pipeline.start(user_text)
@@ -353,6 +384,7 @@ def create_app(state: AppState) -> Flask:
                                 {"role": "assistant", "content": full_response})
                             if len(state.conversation_history) > 20:
                                 state.conversation_history = state.conversation_history[-20:]
+                            result = {**result, "full_response": full_response}
                     yield f"data: {json.dumps(result)}\n\n"
                     return
                 # WAIT: emit a keepalive ping every ~0.5 s so proxies/browsers don't
@@ -467,6 +499,12 @@ def create_app(state: AppState) -> Flask:
                 system_prompt=state.user_system_prompt,
                 conversation_history=state.conversation_history.copy(),
                 voice_conditionals_ready=state.voice_conditionals_ready,
+                llm_temperature=state.llm_temperature,
+                personality_addon=build_personality_addon(state),
+                tts_exaggeration=state.tts_exaggeration,
+                tts_temperature=state.tts_temperature,
+                tts_cfg_weight=state.tts_cfg_weight,
+                tts_repetition_penalty=state.tts_repetition_penalty,
             )
             
             pipeline.start(transcribed_text)

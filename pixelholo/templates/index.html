@@ -34,6 +34,16 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
+        .container.chat-active {
+            max-width: 1200px;
+        }
+
+        @media (min-width: 1280px) {
+            .container.chat-active {
+                max-width: 1320px;
+            }
+        }
+
         h1 {
             color: #2d3748;
             font-size: 2.5rem;
@@ -295,6 +305,284 @@
             color: #c53030;
         }
 
+        .avatar-settings-panel {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+
+        .avatar-settings-toggle {
+            flex: 0 0 40px;
+            width: 40px;
+            min-height: 120px;
+            padding: 0;
+            border: none;
+            border-right: 1px solid #e2e8f0;
+            background: linear-gradient(135deg, #edf2f7, #e2e8f0);
+            color: #667eea;
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .avatar-settings-toggle:hover {
+            background: linear-gradient(135deg, #e2e8f0, #cbd5e0);
+            color: #5a67d8;
+        }
+
+        .avatar-settings-drawer {
+            flex: 0 0 0;
+            width: 0;
+            min-width: 0;
+            overflow: hidden;
+            opacity: 0;
+            visibility: hidden;
+            transition: width 0.28s ease, opacity 0.2s ease, visibility 0.28s;
+        }
+
+        .avatar-settings-panel.is-expanded .avatar-settings-drawer {
+            flex: 0 0 var(--sidebar-drawer-width, 320px);
+            width: var(--sidebar-drawer-width, 320px);
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .avatar-settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 16px 0;
+        }
+
+        .avatar-settings-title {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #2d3748;
+            min-width: 0;
+        }
+
+        .btn-reset-settings {
+            flex-shrink: 0;
+            padding: 6px 12px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #4a5568;
+            background: #fff;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+        }
+
+        .btn-reset-settings:hover:not(:disabled) {
+            border-color: #667eea;
+            color: #667eea;
+            background: #f7fafc;
+        }
+
+        .btn-reset-settings:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .avatar-settings-body {
+            padding: 8px 16px 16px;
+        }
+
+        .transcript-panel {
+            margin-top: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+
+        .transcript-summary {
+            cursor: pointer;
+            padding: 12px 16px;
+            font-weight: 600;
+            color: #2d3748;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .transcript-summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .transcript-summary::before {
+            content: '▸';
+            font-size: 0.85rem;
+            color: #667eea;
+        }
+
+        .transcript-panel[open] .transcript-summary::before {
+            content: '▾';
+        }
+
+        .transcript-body {
+            padding: 0 16px 16px;
+            border-top: 1px solid #edf2f7;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .transcript-empty {
+            color: #a0aec0;
+            font-size: 0.9rem;
+            margin: 12px 0 4px;
+            font-style: italic;
+        }
+
+        .transcript-entry {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .transcript-entry:first-child {
+            margin-top: 12px;
+        }
+
+        .transcript-user {
+            background: #ebf4ff;
+            border-left: 3px solid #667eea;
+        }
+
+        .transcript-assistant {
+            background: #f0fff4;
+            border-left: 3px solid #38a169;
+        }
+
+        .transcript-role {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 4px;
+            color: #4a5568;
+        }
+
+        .transcript-text {
+            margin: 0;
+            color: #2d3748;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .settings-hint {
+            color: #718096;
+            font-size: 0.85rem;
+            margin: 12px 0 14px;
+            line-height: 1.45;
+        }
+
+        .settings-subheading {
+            font-size: 0.95rem;
+            color: #4a5568;
+            margin: 16px 0 8px;
+            font-weight: 600;
+        }
+
+        .settings-subheading:first-of-type {
+            margin-top: 4px;
+        }
+
+        .emotion-picker {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .emotion-btn {
+            flex: 1 1 44px;
+            min-width: 44px;
+            max-width: 56px;
+            aspect-ratio: 1;
+            padding: 0;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: #fff;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+        }
+
+        .emotion-btn:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+            transform: translateY(-1px);
+        }
+
+        .emotion-btn.is-selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #ebf4ff, #e9d8fd);
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
+        }
+
+        .emotion-intensity-row.is-disabled {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .settings-row,
+        .settings-field {
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        .settings-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-size: 0.88rem;
+            color: #4a5568;
+            margin-bottom: 6px;
+            gap: 8px;
+        }
+
+        .settings-value {
+            font-variant-numeric: tabular-nums;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .settings-row input[type="range"] {
+            width: 100%;
+            accent-color: #667eea;
+        }
+
+        .settings-field textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 72px;
+        }
+
+        .settings-field textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
         /* State 2: Loading */
         .loading-state {
             display: none;
@@ -332,12 +620,49 @@
             display: none;
         }
 
+        .chat-layout {
+            display: flex;
+            align-items: flex-start;
+            gap: 24px;
+        }
+
+        .chat-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .chat-sidebar {
+            flex: 0 0 auto;
+            width: auto;
+            position: sticky;
+            top: 20px;
+            --sidebar-drawer-width: 320px;
+        }
+
+        @media (min-width: 1100px) {
+            .chat-sidebar {
+                --sidebar-drawer-width: 360px;
+            }
+        }
+
+        @media (min-width: 1400px) {
+            .chat-sidebar {
+                --sidebar-drawer-width: 420px;
+            }
+        }
+
+        .chat-sidebar .avatar-settings-panel.is-expanded .avatar-settings-drawer {
+            max-height: calc(100vh - 120px);
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
         .video-container {
             position: relative;
             width: 100%;
             max-width: 640px;
             margin: 0 auto 30px;
-            background: #000;
+            background: #0a0a0a;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
@@ -352,17 +677,32 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: #000;
+            background: transparent;
             display: block;
             opacity: 0;
-            transition: opacity 80ms linear;
             pointer-events: none;
+            z-index: 2;
+        }
+
+        /* Visible while playing or holding last frame during handoff */
+        .video-player.is-front,
+        .video-player.is-hold {
+            opacity: 1;
         }
 
         .video-player.is-front {
-            opacity: 1;
             pointer-events: auto;
+            z-index: 3;
+        }
+
+        .video-player.is-hold {
             z-index: 2;
+        }
+
+        /* Next chunk preloading invisibly on top until it starts playing */
+        .video-player.is-promoting {
+            opacity: 0;
+            z-index: 4;
         }
 
         .video-poster {
@@ -372,15 +712,10 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: #000;
+            background: #0a0a0a;
             opacity: 1;
-            transition: opacity 120ms linear;
             z-index: 1;
             pointer-events: none;
-        }
-
-        .video-poster.hidden {
-            opacity: 0;
         }
 
         .chat-input-container {
@@ -388,7 +723,7 @@
             gap: 10px;
             margin-bottom: 20px;
         }
-        
+
         .mic-btn {
             padding: 15px 20px;
             background: linear-gradient(135deg, #667eea, #764ba2);
@@ -403,27 +738,30 @@
             justify-content: center;
             min-width: 60px;
         }
-        
+
         .mic-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
         }
-        
+
         .mic-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        
+
         .mic-btn.recording {
             background: linear-gradient(135deg, #fc8181, #e53e3e);
             animation: pulse 1.5s ease-in-out infinite;
         }
-        
+
         @keyframes pulse {
-            0%, 100% {
+
+            0%,
+            100% {
                 transform: scale(1);
                 box-shadow: 0 0 0 0 rgba(252, 129, 129, 0.7);
             }
+
             50% {
                 transform: scale(1.05);
                 box-shadow: 0 0 0 10px rgba(252, 129, 129, 0);
@@ -501,6 +839,18 @@
             display: none !important;
         }
 
+        @media (max-width: 900px) {
+            .chat-layout {
+                flex-direction: column;
+            }
+
+            .chat-sidebar {
+                flex: none;
+                width: 100%;
+                position: static;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 25px;
@@ -544,7 +894,8 @@
 
             <div class="saved-avatars-block" id="savedAvatarsBlock">
                 <h3 class="saved-avatars-heading">Saved avatars</h3>
-                <p class="saved-avatars-hint" id="savedAvatarsEmpty">None yet. After you chat with an avatar, give it a name and save it below the video.</p>
+                <p class="saved-avatars-hint" id="savedAvatarsEmpty">None yet. After you chat with an avatar, give it a
+                    name and save it below the video.</p>
                 <div class="saved-avatar-grid" id="savedAvatarsGrid"></div>
             </div>
         </div>
@@ -557,35 +908,147 @@
 
         <!-- State 3: Chat -->
         <div class="chat-state" id="chatState">
-            <div class="video-container" id="videoContainer">
-                <!-- Static poster shown while idle; hidden once a chunk starts playing. -->
-                <img id="videoPoster" class="video-poster" alt="">
-                <!-- Two stacked video players. We never re-assign src on the visible
-                     element; instead we load the next chunk into the back player and
-                     swap which one has the `is-front` class on chunk-end. This keeps
-                     the visible video element fully buffered and avoids the ~500 ms
-                     buffering UI that appears whenever a video element re-loads. -->
-                <video id="videoPlayerA" class="video-player" preload="auto" playsinline></video>
-                <video id="videoPlayerB" class="video-player" preload="auto" playsinline></video>
+            <div class="chat-layout">
+                <div class="chat-main">
+                    <div class="video-container" id="videoContainer">
+                        <!-- Avatar poster stays under the video stack to avoid black flashes between chunks. -->
+                        <img id="videoPoster" class="video-poster" alt="">
+                        <!-- Two stacked video players. We never re-assign src on the visible
+                             element; instead we load the next chunk into the back player and
+                             swap which one has the `is-front` class on chunk-end. This keeps
+                             the visible video element fully buffered and avoids the ~500 ms
+                             buffering UI that appears whenever a video element re-loads. -->
+                        <video id="videoPlayerA" class="video-player" preload="auto" playsinline></video>
+                        <video id="videoPlayerB" class="video-player" preload="auto" playsinline></video>
+                    </div>
+
+                    <div class="chat-input-container">
+                        <button class="mic-btn" id="micBtn" title="Hold to record">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <input type="text" id="chatInput" placeholder="Type your message here..." autocomplete="off">
+                        <button class="send-btn" id="sendBtn">
+                            <i class="fas fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+                    <div class="thinking-indicator" id="thinkingIndicator">
+                        <i class="fas fa-spinner fa-spin"></i> Thinking...
+                    </div>
+
+                    <details class="transcript-panel" id="transcriptPanel">
+                        <summary class="transcript-summary">Transcript</summary>
+                        <div class="transcript-body" id="transcriptBody">
+                            <p class="transcript-empty" id="transcriptEmpty">No messages yet.</p>
+                        </div>
+                    </details>
+
+                    <div class="avatar-persist-row">
+                        <input type="text" id="saveAvatarNameInput" placeholder="Name this avatar to save…"
+                            maxlength="120" autocomplete="off">
+                        <button type="button" class="btn-secondary" id="saveAvatarBtn">Save avatar</button>
+                        <span class="save-avatar-status" id="saveAvatarStatus"></span>
+                    </div>
+
+                    <div class="error-message" id="chatError"></div>
+                </div>
+
+                <aside class="chat-sidebar">
+                    <div class="avatar-settings-panel is-expanded" id="avatarSettings">
+                        <button type="button" class="avatar-settings-toggle" id="avatarSettingsToggle"
+                            aria-expanded="true" aria-controls="avatarSettingsDrawer"
+                            aria-label="Collapse avatar tuning panel">
+                            <span class="toggle-chevron" aria-hidden="true">&gt;</span>
+                        </button>
+                        <div class="avatar-settings-drawer" id="avatarSettingsDrawer">
+                            <div class="avatar-settings-header">
+                                <h3 class="avatar-settings-title">Avatar &amp; response tuning</h3>
+                                <button type="button" class="btn-reset-settings" id="resetAvatarSettingsBtn"
+                                    title="Reset all tuning to defaults">Reset</button>
+                            </div>
+                            <div class="avatar-settings-body">
+                                <p class="settings-hint">Adjust how the LLM replies, how Chatterbox speaks, and how the
+                                    video looks. Voice/LLM values are saved with your avatar.</p>
+
+                                <h4 class="settings-subheading">Personality (LLM)</h4>
+                                <span class="settings-label" style="margin-bottom: 8px;">Emotion</span>
+                                <div class="emotion-picker" id="emotionPicker" role="group" aria-label="Emotion">
+                                    <button type="button" class="emotion-btn" data-emotion="angry" title="Angry"
+                                        aria-pressed="false">😠</button>
+                                    <button type="button" class="emotion-btn" data-emotion="happy" title="Happy"
+                                        aria-pressed="false">😊</button>
+                                    <button type="button" class="emotion-btn" data-emotion="sad" title="Sad"
+                                        aria-pressed="false">😢</button>
+                                    <button type="button" class="emotion-btn" data-emotion="scared" title="Scared"
+                                        aria-pressed="false">😨</button>
+                                    <button type="button" class="emotion-btn" data-emotion="disgust" title="Disgusted"
+                                        aria-pressed="false">🤢</button>
+                                </div>
+                                <label class="settings-row emotion-intensity-row is-disabled" id="emotionIntensityRow">
+                                    <span class="settings-label">Emotion intensity <span class="settings-value"
+                                            id="valEmotionIntensity">50%</span></span>
+                                    <input type="range" id="setEmotionIntensity" min="0" max="100" step="5" value="50"
+                                        disabled>
+                                </label>
+                                <label class="settings-field">
+                                    <span class="settings-label">Extra instructions <span class="settings-value"
+                                            id="personalityCount"></span></span>
+                                    <textarea id="setPersonality" rows="3" maxlength="2000"
+                                        placeholder="e.g. Speak warmly, use short sentences, stay in character as a science teacher…"></textarea>
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">Creativity (temperature) <span class="settings-value"
+                                            id="valLlmTemp">0.7</span></span>
+                                    <input type="range" id="setLlmTemp" min="0.1" max="1.5" step="0.05" value="0.7">
+                                </label>
+
+                                <h4 class="settings-subheading">Voice (TTS)</h4>
+                                <label class="settings-row">
+                                    <span class="settings-label">Expressiveness <span class="settings-value"
+                                            id="valTtsExag">0.5</span></span>
+                                    <input type="range" id="setTtsExag" min="0.25" max="1" step="0.05" value="0.5">
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">Speech variety <span class="settings-value"
+                                            id="valTtsTemp">0.8</span></span>
+                                    <input type="range" id="setTtsTemp" min="0.4" max="1.2" step="0.05" value="0.8">
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">CFG weight <span class="settings-value"
+                                            id="valTtsCfg">0.5</span></span>
+                                    <input type="range" id="setTtsCfg" min="0" max="1" step="0.05" value="0.5">
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">Repetition penalty <span class="settings-value"
+                                            id="valTtsRep">1.2</span></span>
+                                    <input type="range" id="setTtsRep" min="1" max="1.5" step="0.02" value="1.2">
+                                </label>
+
+                                <h4 class="settings-subheading">Video look &amp; pace</h4>
+                                <label class="settings-row">
+                                    <span class="settings-label">Playback speed <span class="settings-value"
+                                            id="valPlayback">1</span>×</span>
+                                    <input type="range" id="setPlayback" min="0.6" max="1.5" step="0.05" value="1">
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">Brightness <span class="settings-value"
+                                            id="valBright">1</span></span>
+                                    <input type="range" id="setBright" min="0.5" max="1.5" step="0.05" value="1">
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">Contrast <span class="settings-value"
+                                            id="valContrast">1</span></span>
+                                    <input type="range" id="setContrast" min="0.5" max="1.5" step="0.05" value="1">
+                                </label>
+                                <label class="settings-row">
+                                    <span class="settings-label">Saturation <span class="settings-value"
+                                            id="valSat">1</span></span>
+                                    <input type="range" id="setSat" min="0" max="2" step="0.05" value="1">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
             </div>
-            <div class="avatar-persist-row">
-                <input type="text" id="saveAvatarNameInput" placeholder="Name this avatar to save…" maxlength="120" autocomplete="off">
-                <button type="button" class="btn-secondary" id="saveAvatarBtn">Save avatar</button>
-                <span class="save-avatar-status" id="saveAvatarStatus"></span>
-            </div>
-            <div class="chat-input-container">
-                <button class="mic-btn" id="micBtn" title="Hold to record">
-                    <i class="fas fa-microphone"></i>
-                </button>
-                <input type="text" id="chatInput" placeholder="Type your message here..." autocomplete="off">
-                <button class="send-btn" id="sendBtn">
-                    <i class="fas fa-paper-plane"></i> Send
-                </button>
-            </div>
-            <div class="thinking-indicator" id="thinkingIndicator">
-                <i class="fas fa-spinner fa-spin"></i> Thinking...
-            </div>
-            <div class="error-message" id="chatError"></div>
         </div>
     </div>
 
@@ -594,6 +1057,32 @@
         let currentState = 'upload';
         let posterUrl = '';
 
+        const EMOTION_LABELS = {
+            angry: 'Angry',
+            happy: 'Happy',
+            sad: 'Sad',
+            scared: 'Scared',
+            disgust: 'Disgusted',
+        };
+
+        let selectedEmotion = '';
+
+        const DEFAULT_AVATAR_SETTINGS = {
+            llm_temperature: 0.7,
+            avatar_emotion: '',
+            avatar_emotion_intensity: 0.5,
+            avatar_personality: '',
+            tts_exaggeration: 0.5,
+            tts_temperature: 0.8,
+            tts_cfg_weight: 0.5,
+            tts_repetition_penalty: 1.2,
+            video_playback_rate: 1,
+            color_brightness: 1,
+            color_contrast: 1,
+            color_saturation: 1,
+        };
+
+        const containerEl = document.querySelector('.container');
         const uploadState = document.getElementById('uploadState');
         const loadingState = document.getElementById('loadingState');
         const chatState = document.getElementById('chatState');
@@ -614,18 +1103,23 @@
         const saveAvatarNameInput = document.getElementById('saveAvatarNameInput');
         const saveAvatarBtn = document.getElementById('saveAvatarBtn');
         const saveAvatarStatus = document.getElementById('saveAvatarStatus');
+        const resetAvatarSettingsBtn = document.getElementById('resetAvatarSettingsBtn');
+        const transcriptBody = document.getElementById('transcriptBody');
+        const transcriptEmpty = document.getElementById('transcriptEmpty');
 
         function showState(state) {
             uploadState.style.display = state === 'upload' ? 'block' : 'none';
             loadingState.style.display = state === 'loading' ? 'block' : 'none';
             chatState.style.display = state === 'chat' ? 'block' : 'none';
+            if (containerEl) {
+                containerEl.classList.toggle('chat-active', state === 'chat');
+            }
             currentState = state;
         }
 
         function applySessionReady(data) {
             posterUrl = data.poster_url;
             videoPoster.src = posterUrl;
-            videoPoster.classList.remove('hidden');
             if (data.stt_available === false) {
                 micBtn.disabled = true;
                 micBtn.title = data.stt_error
@@ -635,7 +1129,301 @@
                 micBtn.disabled = false;
                 micBtn.title = 'Hold to record';
             }
+            if (data.settings) {
+                populateSettingsForm(data.settings);
+            }
+            applyVideoDisplayFromForm();
             showState('chat');
+            refreshTranscript();
+        }
+
+        function populateSettingsForm(s) {
+            if (!s) return;
+            const g = (id) => document.getElementById(id);
+            const setv = (id, val) => { const e = g(id); if (e && val != null && val !== '') e.value = val; };
+            setv('setLlmTemp', s.llm_temperature);
+            setv('setTtsExag', s.tts_exaggeration);
+            setv('setTtsTemp', s.tts_temperature);
+            setv('setTtsCfg', s.tts_cfg_weight);
+            setv('setTtsRep', s.tts_repetition_penalty);
+            setv('setPlayback', s.video_playback_rate);
+            setv('setBright', s.color_brightness);
+            setv('setContrast', s.color_contrast);
+            setv('setSat', s.color_saturation);
+            const ta = g('setPersonality');
+            if (ta && s.avatar_personality != null) ta.value = s.avatar_personality;
+            setSelectedEmotion(s.avatar_emotion || '', false);
+            const intensityPct = Math.round(
+                Math.max(0, Math.min(1, Number(s.avatar_emotion_intensity ?? 0.5))) * 100
+            );
+            const intensityEl = g('setEmotionIntensity');
+            if (intensityEl) intensityEl.value = String(intensityPct);
+            updateEmotionIntensityUI();
+            updateSettingsValueSpans();
+            updatePersonalityCount();
+        }
+
+        function setSelectedEmotion(emotion, pushSettings) {
+            selectedEmotion = emotion && EMOTION_LABELS[emotion] ? emotion : '';
+            document.querySelectorAll('.emotion-btn').forEach((btn) => {
+                const active = btn.dataset.emotion === selectedEmotion;
+                btn.classList.toggle('is-selected', active);
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+            updateEmotionIntensityUI();
+            if (pushSettings !== false) schedulePushSessionSettings();
+        }
+
+        function updateEmotionIntensityUI() {
+            const row = document.getElementById('emotionIntensityRow');
+            const slider = document.getElementById('setEmotionIntensity');
+            const span = document.getElementById('valEmotionIntensity');
+            const hasEmotion = Boolean(selectedEmotion);
+            if (row) row.classList.toggle('is-disabled', !hasEmotion);
+            if (slider) slider.disabled = !hasEmotion;
+            if (span && slider) {
+                span.textContent = slider.value + '%';
+            }
+        }
+
+        function updatePersonalityCount() {
+            const ta = document.getElementById('setPersonality');
+            const pc = document.getElementById('personalityCount');
+            if (!ta || !pc) return;
+            pc.textContent = '(' + ta.value.length + '/2000)';
+        }
+
+        function updateSettingsValueSpans() {
+            const pair = (rangeId, spanId, fmt) => {
+                const r = document.getElementById(rangeId);
+                const s = document.getElementById(spanId);
+                if (!r || !s) return;
+                const v = parseFloat(r.value);
+                s.textContent = fmt(Number.isFinite(v) ? v : parseFloat(r.getAttribute('value')));
+            };
+            pair('setLlmTemp', 'valLlmTemp', (v) => v.toFixed(2));
+            pair('setTtsExag', 'valTtsExag', (v) => v.toFixed(2));
+            pair('setTtsTemp', 'valTtsTemp', (v) => v.toFixed(2));
+            pair('setTtsCfg', 'valTtsCfg', (v) => v.toFixed(2));
+            pair('setTtsRep', 'valTtsRep', (v) => v.toFixed(2));
+            pair('setPlayback', 'valPlayback', (v) => v.toFixed(2));
+            pair('setBright', 'valBright', (v) => v.toFixed(2));
+            pair('setContrast', 'valContrast', (v) => v.toFixed(2));
+            pair('setSat', 'valSat', (v) => v.toFixed(2));
+            const emotionSlider = document.getElementById('setEmotionIntensity');
+            const emotionSpan = document.getElementById('valEmotionIntensity');
+            if (emotionSlider && emotionSpan) {
+                emotionSpan.textContent = emotionSlider.value + '%';
+            }
+        }
+
+        function collectSettingsBody() {
+            const num = (id, fallback) => {
+                const e = document.getElementById(id);
+                if (!e) return fallback;
+                const v = parseFloat(e.value);
+                return Number.isFinite(v) ? v : fallback;
+            };
+            const ta = document.getElementById('setPersonality');
+            const intensityEl = document.getElementById('setEmotionIntensity');
+            let emotionIntensity = 0.5;
+            if (intensityEl) {
+                const pct = parseFloat(intensityEl.value);
+                if (Number.isFinite(pct)) emotionIntensity = Math.max(0, Math.min(1, pct / 100));
+            }
+            return {
+                llm_temperature: num('setLlmTemp', 0.7),
+                avatar_emotion: selectedEmotion,
+                avatar_emotion_intensity: emotionIntensity,
+                avatar_personality: ta ? ta.value : '',
+                tts_exaggeration: num('setTtsExag', 0.5),
+                tts_temperature: num('setTtsTemp', 0.8),
+                tts_cfg_weight: num('setTtsCfg', 0.5),
+                tts_repetition_penalty: num('setTtsRep', 1.2),
+                video_playback_rate: num('setPlayback', 1),
+                color_brightness: num('setBright', 1),
+                color_contrast: num('setContrast', 1),
+                color_saturation: num('setSat', 1),
+            };
+        }
+
+        function applyVideoDisplayFromForm() {
+            const g = (id, fb) => {
+                const e = document.getElementById(id);
+                if (!e) return fb;
+                const v = parseFloat(e.value);
+                return Number.isFinite(v) ? v : fb;
+            };
+            const b = g('setBright', 1);
+            const c = g('setContrast', 1);
+            const s = g('setSat', 1);
+            if (videoContainer) {
+                videoContainer.style.filter = 'brightness(' + b + ') contrast(' + c + ') saturate(' + s + ')';
+            }
+        }
+
+        function applyPlaybackToPlayers() {
+            const e = document.getElementById('setPlayback');
+            if (!e) return;
+            const v = parseFloat(e.value);
+            const rate = Number.isFinite(v) ? v : 1;
+            videoPlayerA.playbackRate = rate;
+            videoPlayerB.playbackRate = rate;
+        }
+
+        let sessionSaveTimer = null;
+        function schedulePushSessionSettings() {
+            if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+            sessionSaveTimer = setTimeout(pushSessionSettings, 400);
+        }
+
+        async function pushSessionSettings() {
+            try {
+                const body = collectSettingsBody();
+                const r = await fetch('/session/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                await r.json();
+            } catch (err) {
+                console.warn('session settings sync', err);
+            }
+        }
+
+        async function resetAvatarSettings() {
+            if (resetAvatarSettingsBtn) resetAvatarSettingsBtn.disabled = true;
+            try {
+                populateSettingsForm(DEFAULT_AVATAR_SETTINGS);
+                applyVideoDisplayFromForm();
+                applyPlaybackToPlayers();
+                if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+                await pushSessionSettings();
+            } finally {
+                if (resetAvatarSettingsBtn) resetAvatarSettingsBtn.disabled = false;
+            }
+        }
+
+        function renderTranscript(messages) {
+            if (!transcriptBody) return;
+            transcriptBody.innerHTML = '';
+            const list = Array.isArray(messages) ? messages : [];
+            if (list.length === 0) {
+                if (transcriptEmpty) {
+                    const empty = document.createElement('p');
+                    empty.className = 'transcript-empty';
+                    empty.id = 'transcriptEmpty';
+                    empty.textContent = 'No messages yet.';
+                    transcriptBody.appendChild(empty);
+                }
+                return;
+            }
+            for (const msg of list) {
+                const role = msg.role === 'assistant' ? 'assistant' : 'user';
+                const label = role === 'assistant' ? 'Avatar' : 'You';
+                const content = (msg.content || '').trim();
+                if (!content) continue;
+                const entry = document.createElement('div');
+                entry.className = 'transcript-entry transcript-' + role;
+                const roleEl = document.createElement('span');
+                roleEl.className = 'transcript-role';
+                roleEl.textContent = label;
+                const textEl = document.createElement('p');
+                textEl.className = 'transcript-text';
+                textEl.textContent = content;
+                entry.appendChild(roleEl);
+                entry.appendChild(textEl);
+                transcriptBody.appendChild(entry);
+            }
+            transcriptBody.scrollTop = transcriptBody.scrollHeight;
+        }
+
+        function appendTranscriptEntry(role, content) {
+            if (!transcriptBody || !content || !String(content).trim()) return;
+            const emptyEl = document.getElementById('transcriptEmpty');
+            if (emptyEl) emptyEl.remove();
+            const isAssistant = role === 'assistant';
+            const entry = document.createElement('div');
+            entry.className = 'transcript-entry transcript-' + (isAssistant ? 'assistant' : 'user');
+            const roleEl = document.createElement('span');
+            roleEl.className = 'transcript-role';
+            roleEl.textContent = isAssistant ? 'Avatar' : 'You';
+            const textEl = document.createElement('p');
+            textEl.className = 'transcript-text';
+            textEl.textContent = String(content).trim();
+            entry.appendChild(roleEl);
+            entry.appendChild(textEl);
+            transcriptBody.appendChild(entry);
+            transcriptBody.scrollTop = transcriptBody.scrollHeight;
+        }
+
+        async function refreshTranscript() {
+            try {
+                const r = await fetch('/session/transcript');
+                const data = await r.json();
+                renderTranscript(data.messages || []);
+            } catch (err) {
+                console.warn('transcript fetch', err);
+            }
+        }
+
+        function wireAvatarSettingsSidebar() {
+            const panel = document.getElementById('avatarSettings');
+            const toggle = document.getElementById('avatarSettingsToggle');
+            const chevron = toggle && toggle.querySelector('.toggle-chevron');
+            if (!panel || !toggle || !chevron) return;
+
+            function setSidebarExpanded(expanded) {
+                panel.classList.toggle('is-expanded', expanded);
+                toggle.setAttribute('aria-expanded', String(expanded));
+                toggle.setAttribute(
+                    'aria-label',
+                    expanded ? 'Collapse avatar tuning panel' : 'Expand avatar tuning panel'
+                );
+                chevron.textContent = expanded ? '>' : '<';
+            }
+
+            toggle.addEventListener('click', () => {
+                setSidebarExpanded(!panel.classList.contains('is-expanded'));
+            });
+
+            if (resetAvatarSettingsBtn) {
+                resetAvatarSettingsBtn.addEventListener('click', resetAvatarSettings);
+            }
+        }
+
+        function wireAvatarSettingsPanel() {
+            const rangeIds = ['setLlmTemp', 'setTtsExag', 'setTtsTemp', 'setTtsCfg', 'setTtsRep', 'setPlayback', 'setBright', 'setContrast', 'setSat', 'setEmotionIntensity'];
+            rangeIds.forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('input', () => {
+                    updateSettingsValueSpans();
+                    if (id === 'setEmotionIntensity') updateEmotionIntensityUI();
+                    if (id !== 'setEmotionIntensity') {
+                        applyVideoDisplayFromForm();
+                        applyPlaybackToPlayers();
+                    }
+                    schedulePushSessionSettings();
+                });
+            });
+            document.querySelectorAll('.emotion-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const emotion = btn.dataset.emotion || '';
+                    if (selectedEmotion === emotion) {
+                        setSelectedEmotion('');
+                    } else {
+                        setSelectedEmotion(emotion);
+                    }
+                });
+            });
+            const ta = document.getElementById('setPersonality');
+            if (ta) {
+                ta.addEventListener('input', () => {
+                    updatePersonalityCount();
+                    schedulePushSessionSettings();
+                });
+            }
         }
 
         async function refreshSavedAvatars() {
@@ -727,6 +1515,11 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             refreshSavedAvatars();
+            wireAvatarSettingsSidebar();
+            wireAvatarSettingsPanel();
+            updateEmotionIntensityUI();
+            updateSettingsValueSpans();
+            updatePersonalityCount();
         });
 
         function showError(element, message) {
@@ -834,13 +1627,13 @@
                 handleSend();
             }
         });
-        
+
         // Microphone recording functionality
         let mediaRecorder = null;
         let audioChunks = [];
         let isRecording = false;
         let stream = null;
-        
+
         async function requestMicrophonePermission() {
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -851,15 +1644,15 @@
                 return false;
             }
         }
-        
+
         function startRecording() {
             if (isRecording) return;
-            
+
             audioChunks = [];
             isRecording = true;
             micBtn.classList.add('recording');
             micBtn.innerHTML = '<i class="fas fa-stop"></i>';
-            
+
             const options = { mimeType: 'audio/webm' };
             if (!MediaRecorder.isTypeSupported(options.mimeType)) {
                 options.mimeType = 'audio/webm;codecs=opus';
@@ -867,21 +1660,21 @@
                     options.mimeType = 'audio/webm';
                 }
             }
-            
+
             try {
                 mediaRecorder = new MediaRecorder(stream, options);
-                
+
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
                         audioChunks.push(event.data);
                     }
                 };
-                
+
                 mediaRecorder.onstop = async () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     await sendAudioToServer(audioBlob);
                 };
-                
+
                 mediaRecorder.start();
                 console.log('Recording started');
             } catch (error) {
@@ -890,66 +1683,67 @@
                 showError(chatError, 'Failed to start recording. Please try again.');
             }
         }
-        
+
         function stopRecording() {
             if (!isRecording) return;
-            
+
             isRecording = false;
             micBtn.classList.remove('recording');
             micBtn.innerHTML = '<i class="fas fa-microphone"></i>';
-            
+
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
-            
+
             // Stop all tracks
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
             }
-            
+
             console.log('Recording stopped');
         }
-        
+
         async function sendAudioToServer(audioBlob) {
             // Clean up any previous question's state
             cleanupPreviousQuestion();
-            
+
             // Disable input and show thinking indicator
             chatInput.disabled = true;
             sendBtn.disabled = true;
             micBtn.disabled = true;
             thinkingIndicator.classList.add('active');
             chatError.classList.remove('active');
-            
+
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.webm');
-                
+
                 const response = await fetch('/chat_audio', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.error || 'Audio processing failed');
                 }
-                
+
                 // Show transcription in chat input (optional feedback)
                 if (data.transcription) {
                     chatInput.value = data.transcription;
+                    appendTranscriptEntry('user', data.transcription);
                     console.log('Transcription:', data.transcription);
                 }
-                
+
                 // Open SSE stream for chunks (same as text input)
                 if (data.pipeline_id) {
                     startEventStream(data.pipeline_id);
                 } else {
                     throw new Error('No pipeline ID returned');
                 }
-                
+
             } catch (error) {
                 console.error('Error sending audio:', error);
                 showError(chatError, error.message || 'Failed to process audio. Please try again.');
@@ -959,7 +1753,7 @@
                 thinkingIndicator.classList.remove('active');
             }
         }
-        
+
         // Microphone button handlers
         micBtn.addEventListener('mousedown', async (e) => {
             e.preventDefault();
@@ -967,27 +1761,27 @@
                 stopRecording();
                 return;
             }
-            
+
             const hasPermission = await requestMicrophonePermission();
             if (hasPermission) {
                 startRecording();
             }
         });
-        
+
         micBtn.addEventListener('mouseup', (e) => {
             e.preventDefault();
             if (isRecording) {
                 stopRecording();
             }
         });
-        
+
         micBtn.addEventListener('mouseleave', (e) => {
             // Stop recording if mouse leaves button while recording
             if (isRecording) {
                 stopRecording();
             }
         });
-        
+
         // Touch events for mobile
         micBtn.addEventListener('touchstart', async (e) => {
             e.preventDefault();
@@ -995,20 +1789,20 @@
                 stopRecording();
                 return;
             }
-            
+
             const hasPermission = await requestMicrophonePermission();
             if (hasPermission) {
                 startRecording();
             }
         });
-        
+
         micBtn.addEventListener('touchend', (e) => {
             e.preventDefault();
             if (isRecording) {
                 stopRecording();
             }
         });
-        
+
         micBtn.addEventListener('touchcancel', (e) => {
             e.preventDefault();
             if (isRecording) {
@@ -1016,23 +1810,16 @@
             }
         });
 
-        // === Two-element opacity-swap player =================================
+        // === Two-element video stack (poster underlay + seamless handoff) =====
         //
-        // We keep two <video> elements stacked in the same container. At any time
-        // ONE of them is "front" (opacity 1, visible, currently playing) and the
-        // other is "back" (opacity 0, preloading the next chunk). Crucially we
-        // never re-assign `src` on the front element while it's visible -- doing
-        // so triggers the browser's buffering UI for ~300-500 ms even if the file
-        // is in HTTP cache. Instead, on the chunk-end event we just swap which
-        // element has the `is-front` CSS class and call play() on the new front
-        // (whose data is already fully loaded). The transition is essentially
-        // instantaneous (~80 ms CSS opacity fade).
+        // Poster stays visible underneath. On chunk end we hold the current frame
+        // until the preloaded back player fires `playing`, then swap — no fade.
 
         const players = [videoPlayerA, videoPlayerB];
         let frontIdx = 0;
         let backIdx = 1;
-        const playerLoaded = [false, false]; // back-element src has finished loading
-        const playerSrc = ['', ''];           // current src per element (for de-dup)
+        const playerLoaded = [false, false];
+        const playerSrc = ['', ''];
 
         let videoQueue = [];
         let isPlayingQueue = false;
@@ -1040,9 +1827,20 @@
         let eventSource = null;
         let firstVideoStarted = false;
         let aspectRatioSet = false;
+        let pendingChunkSwap = false;
+        let handoffFallbackTimer = null;
 
         function frontPlayer() { return players[frontIdx]; }
         function backPlayer() { return players[backIdx]; }
+
+        function isPlayerReady(idx) {
+            const el = players[idx];
+            return playerLoaded[idx] && el.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA;
+        }
+
+        function clearPlayerStateClasses(el) {
+            el.classList.remove('is-front', 'is-hold', 'is-promoting');
+        }
 
         function setAspectRatioFromVideo(videoEl) {
             if (aspectRatioSet) return;
@@ -1053,131 +1851,176 @@
         }
 
         function loadIntoBack(url) {
-            // Load `url` into the BACK player. Returns immediately; readiness is
-            // tracked via the canplaythrough listener attached at startup.
             const idx = backIdx;
             const el = players[idx];
             const versioned = url + '?v=' + Date.now();
             if (playerSrc[idx] === versioned) return;
             playerLoaded[idx] = false;
             playerSrc[idx] = versioned;
+            clearPlayerStateClasses(el);
             el.src = versioned;
             el.load();
         }
 
-        function swapToBack() {
-            // Promote the back player to front: make it visible and play.
-            const newFront = players[backIdx];
-            const oldFront = players[frontIdx];
-
-            newFront.currentTime = 0;
-            newFront.classList.add('is-front');
-            const playPromise = newFront.play();
-            if (playPromise) {
-                playPromise.catch(err => console.warn('play() rejected:', err));
+        function completeRoleSwap(oldIdx, newIdx) {
+            if (handoffFallbackTimer) {
+                clearTimeout(handoffFallbackTimer);
+                handoffFallbackTimer = null;
             }
-            // Hide poster the first time a real video appears.
-            videoPoster.classList.add('hidden');
+            const oldEl = players[oldIdx];
+            const newEl = players[newIdx];
+            clearPlayerStateClasses(oldEl);
+            clearPlayerStateClasses(newEl);
+            newEl.classList.add('is-front');
+            oldEl.pause();
+            frontIdx = newIdx;
+            backIdx = oldIdx;
+            playerLoaded[oldIdx] = false;
+            playerSrc[oldIdx] = '';
+            pendingChunkSwap = false;
+            if (videoQueue.length > 0) {
+                loadIntoBack(videoQueue[0]);
+            }
+        }
 
-            // Remove front-class from previous element after a tick so the fade
-            // covers any single-frame discontinuity.
-            requestAnimationFrame(() => {
-                oldFront.classList.remove('is-front');
-                oldFront.pause();
-            });
+        function promoteBackToFront() {
+            const newIdx = backIdx;
+            const oldIdx = frontIdx;
+            const newEl = players[newIdx];
+            const oldEl = players[oldIdx];
 
-            // Roles swap.
-            const oldFrontIdx = frontIdx;
-            frontIdx = backIdx;
-            backIdx = oldFrontIdx;
-            playerLoaded[oldFrontIdx] = false;
-            playerSrc[oldFrontIdx] = '';
+            if (!isPlayerReady(newIdx)) {
+                pendingChunkSwap = true;
+                return false;
+            }
+
+            pendingChunkSwap = false;
+            if (handoffFallbackTimer) clearTimeout(handoffFallbackTimer);
+
+            let handoffDone = false;
+            const finishHandoff = () => {
+                if (handoffDone) return;
+                handoffDone = true;
+                completeRoleSwap(oldIdx, newIdx);
+            };
+
+            newEl.currentTime = 0;
+            newEl.classList.add('is-promoting');
+            oldEl.classList.add('is-hold');
+
+            const onPlaying = () => {
+                newEl.removeEventListener('playing', onPlaying);
+                finishHandoff();
+            };
+            newEl.addEventListener('playing', onPlaying);
+
+            applyPlaybackToPlayers();
+            const playPromise = newEl.play();
+            if (playPromise) {
+                playPromise.catch((err) => {
+                    console.warn('play() rejected:', err);
+                    finishHandoff();
+                });
+            }
+
+            handoffFallbackTimer = setTimeout(finishHandoff, 600);
+
+            return true;
+        }
+
+        function tryPendingChunkSwap() {
+            if (!pendingChunkSwap || !isPlayingQueue) return;
+            promoteBackToFront();
         }
 
         function startInitialPlayback(url) {
-            // Special case for chunk 0: nothing is on screen yet, so we load into
-            // the *front* element directly and play.
             const el = frontPlayer();
+            const idx = frontIdx;
             const versioned = url + '?v=' + Date.now();
-            playerSrc[frontIdx] = versioned;
+            playerSrc[idx] = versioned;
+            playerLoaded[idx] = false;
+            clearPlayerStateClasses(el);
             el.src = versioned;
             el.load();
-            el.classList.add('is-front');
+
+            const showWhenPlaying = () => {
+                el.removeEventListener('playing', showWhenPlaying);
+                el.classList.add('is-front');
+            };
+            el.addEventListener('playing', showWhenPlaying);
+
+            applyPlaybackToPlayers();
             const p = el.play();
-            if (p) p.catch(err => console.warn('initial play() rejected:', err));
-            videoPoster.classList.add('hidden');
+            if (p) {
+                p.catch((err) => {
+                    console.warn('initial play() rejected:', err);
+                    el.classList.add('is-front');
+                });
+            }
         }
 
         function maybeStartNextChunk() {
-            // Called whenever the queue or playback state changes. Decides whether
-            // to start playback (if idle) or just preload (if already playing).
             if (videoQueue.length === 0) return;
 
             if (!isPlayingQueue) {
                 const url = videoQueue.shift();
                 isPlayingQueue = true;
                 startInitialPlayback(url);
-                // Eagerly load the next one if we have it.
                 if (videoQueue.length > 0) {
                     loadIntoBack(videoQueue[0]);
                 }
-            } else {
-                // Already playing front: keep the back player loaded with the next
-                // queued chunk so the swap on `ended` is instant.
-                if (!playerLoaded[backIdx] && videoQueue.length > 0) {
-                    loadIntoBack(videoQueue[0]);
-                }
+            } else if (!playerLoaded[backIdx] && videoQueue.length > 0) {
+                loadIntoBack(videoQueue[0]);
             }
         }
 
         function onChunkEnded() {
-            // Front chunk finished. Promote back if it has the next chunk loaded;
-            // otherwise stay on the last frame and wait for more.
             if (videoQueue.length === 0 && currentPipelineId === null) {
-                // Pipeline complete and nothing more queued -> idle.
                 isPlayingQueue = false;
-                videoPoster.classList.remove('hidden');
-                frontPlayer().classList.remove('is-front');
+                pendingChunkSwap = false;
+                for (const el of players) {
+                    clearPlayerStateClasses(el);
+                    el.pause();
+                }
                 thinkingIndicator.classList.remove('active');
                 return;
             }
 
             if (videoQueue.length > 0) {
-                // Pop the chunk that's (hopefully) loaded into the back player.
                 const expected = videoQueue.shift();
                 const versioned = expected + '?v=';
                 if (!playerSrc[backIdx].startsWith(versioned)) {
-                    // Back player wasn't preloaded with this chunk yet; load now.
-                    // (Happens when the next chunk arrived right as the previous ended.)
                     loadIntoBack(expected);
                 }
-                swapToBack();
-                // Pre-load the chunk after this one if available.
-                if (videoQueue.length > 0) {
-                    loadIntoBack(videoQueue[0]);
+                if (!promoteBackToFront()) {
+                    pendingChunkSwap = true;
                 }
             } else {
-                // Queue empty but pipeline still running: linger on the last frame.
-                // Don't drop is-front; the still image of the last frame is shown.
                 console.log('Queue empty, waiting for more chunks...');
             }
         }
 
-        // Wire up the two players once. Their src changes per chunk but listeners
-        // stay the same.
         for (let i = 0; i < players.length; i++) {
             const idx = i;
             const el = players[idx];
 
-            el.addEventListener('canplaythrough', () => {
+            const markReady = () => {
+                if (el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
                 playerLoaded[idx] = true;
-            });
+                if (idx === backIdx) {
+                    tryPendingChunkSwap();
+                }
+            };
+
+            el.addEventListener('canplaythrough', markReady);
+            el.addEventListener('loadeddata', markReady);
 
             el.addEventListener('loadedmetadata', () => {
                 setAspectRatioFromVideo(el);
             });
 
             el.addEventListener('play', () => {
+                applyPlaybackToPlayers();
                 if (idx !== frontIdx) return;
                 if (!firstVideoStarted) {
                     firstVideoStarted = true;
@@ -1219,13 +2062,15 @@
                     maybeStartNextChunk();
                 } else if (data.status === 'DONE') {
                     console.log('Pipeline complete. Remaining queue:', videoQueue.length);
+                    if (data.full_response) {
+                        appendTranscriptEntry('assistant', data.full_response);
+                    }
                     if (eventSource) { eventSource.close(); eventSource = null; }
                     // If nothing is playing and queue empty, mark idle now;
                     // otherwise the `ended` handler will return us to idle when
                     // the last chunk finishes.
                     if (videoQueue.length === 0 && !isPlayingQueue) {
                         currentPipelineId = null;
-                        videoPoster.classList.remove('hidden');
                         thinkingIndicator.classList.remove('active');
                     } else {
                         // Allow `ended` handler to clean up after final chunk.
@@ -1255,11 +2100,16 @@
                 eventSource.close();
                 eventSource = null;
             }
+            if (handoffFallbackTimer) {
+                clearTimeout(handoffFallbackTimer);
+                handoffFallbackTimer = null;
+            }
+            pendingChunkSwap = false;
             for (const el of players) {
                 el.pause();
                 el.removeAttribute('src');
                 el.load();
-                el.classList.remove('is-front');
+                clearPlayerStateClasses(el);
             }
             playerLoaded[0] = playerLoaded[1] = false;
             playerSrc[0] = playerSrc[1] = '';
@@ -1269,7 +2119,6 @@
             isPlayingQueue = false;
             currentPipelineId = null;
             firstVideoStarted = false;
-            videoPoster.classList.remove('hidden');
         }
 
         async function handleSend() {
@@ -1301,6 +2150,8 @@
                 if (!response.ok) {
                     throw new Error(data.error || 'Generation failed');
                 }
+
+                appendTranscriptEntry('user', text);
 
                 // Clear input
                 chatInput.value = '';

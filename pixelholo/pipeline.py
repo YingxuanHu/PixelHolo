@@ -175,6 +175,9 @@ def _get_ollama_stream(
     prompt: str,
     system_prompt: Optional[str],
     conversation_history: Optional[list[dict[str, str]]] = None,
+    *,
+    llm_temperature: float = 0.7,
+    personality_addon: str = "",
 ):
     """Stream LLM output and yield adaptive-size word chunks.
 
@@ -196,6 +199,12 @@ def _get_ollama_stream(
             print("❌ Search completed but no relevant results found.")
 
     current_system_prompt = system_prompt or BASE_SYSTEM_PROMPT
+    addon = (personality_addon or "").strip()
+    if addon:
+        current_system_prompt = (
+            f"{current_system_prompt}\n\n"
+            f"Additional instructions for your persona and tone:\n{addon}"
+        )
     full_prompt = current_system_prompt + "\n\n"
 
     if conversation_history:
@@ -212,7 +221,7 @@ def _get_ollama_stream(
         "model": OLLAMA_MODEL,
         "prompt": full_prompt,
         "stream": True,
-        "options": {"temperature": 0.7, "num_predict": 196},
+        "options": {"temperature": llm_temperature, "num_predict": 512},
     }
     headers = {"Content-Type": "application/json"}
 
@@ -307,6 +316,13 @@ class PipelineManager:
         system_prompt: Optional[str],
         conversation_history: list[dict[str, str]],
         voice_conditionals_ready: bool = False,
+        *,
+        llm_temperature: float = 0.7,
+        personality_addon: str = "",
+        tts_exaggeration: float = 0.5,
+        tts_temperature: float = 0.8,
+        tts_cfg_weight: float = 0.5,
+        tts_repetition_penalty: float = 1.2,
     ):
         self.tts_model = tts_model
         self.lip_sync_model = lip_sync_model
@@ -318,6 +334,13 @@ class PipelineManager:
         # the voice sample; we can skip passing audio_prompt_path on every TTS call
         # (which otherwise re-runs speaker encoding ~150 ms per chunk).
         self.voice_conditionals_ready = voice_conditionals_ready
+
+        self.llm_temperature = llm_temperature
+        self.personality_addon = personality_addon or ""
+        self.tts_exaggeration = tts_exaggeration
+        self.tts_temperature = tts_temperature
+        self.tts_cfg_weight = tts_cfg_weight
+        self.tts_repetition_penalty = tts_repetition_penalty
 
         self.text_queue: Queue = Queue()
         self.audio_queue: Queue = Queue()
@@ -370,6 +393,8 @@ class PipelineManager:
                 user_text,
                 self.system_prompt,
                 self.conversation_history,
+                llm_temperature=self.llm_temperature,
+                personality_addon=self.personality_addon,
             ):
                 if not self.is_running:
                     break
@@ -401,9 +426,21 @@ class PipelineManager:
             torch.cuda.manual_seed_all(TTS_SEED)
 
         if self.voice_conditionals_ready:
-            return self.tts_model.generate(text)
+            return self.tts_model.generate(
+                text,
+                exaggeration=self.tts_exaggeration,
+                temperature=self.tts_temperature,
+                cfg_weight=self.tts_cfg_weight,
+                repetition_penalty=self.tts_repetition_penalty,
+            )
         return self.tts_model.generate(
-            text, audio_prompt_path=self.voice_sample_path)
+            text,
+            audio_prompt_path=self.voice_sample_path,
+            exaggeration=self.tts_exaggeration,
+            temperature=self.tts_temperature,
+            cfg_weight=self.tts_cfg_weight,
+            repetition_penalty=self.tts_repetition_penalty,
+        )
 
     def _tts_worker(self) -> None:
         """Pull text chunks, synthesize audio, push (idx, audio_path) to lipsync."""

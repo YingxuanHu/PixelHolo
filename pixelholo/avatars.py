@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from . import config
+from .session_settings import settings_payload
 from .state import AppState
 from .utils import setup_upload_directories
 
@@ -119,6 +120,7 @@ def save_avatar_from_state(state: AppState, display_name: str) -> dict[str, Any]
         "created": created,
         "input_ext": ext,
         "has_processed_video": has_processed,
+        "session_prefs": settings_payload(state),
     }
     (out / META_FILENAME).write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -132,8 +134,11 @@ def delete_saved_avatar(avatar_id: str) -> None:
     shutil.rmtree(path)
 
 
-def apply_saved_avatar_to_state(state: AppState, avatar_id: str) -> None:
-    """Reset runtime upload dirs, copy bundle from disk, and set ``AppState`` paths."""
+def apply_saved_avatar_to_state(state: AppState, avatar_id: str) -> dict:
+    """Reset runtime upload dirs, copy bundle from disk, and set ``AppState`` paths.
+
+    Returns the parsed ``meta.json`` dict (for restoring session preferences).
+    """
     root = avatar_dir(avatar_id)
     meta_path = root / META_FILENAME
     if not meta_path.is_file():
@@ -172,3 +177,4 @@ def apply_saved_avatar_to_state(state: AppState, avatar_id: str) -> None:
 
     state.uploaded_input_video = str(dest_video)
     state.uploaded_voice_samples = [str(config.ISOLATED_VOICE_PATH)]
+    return meta

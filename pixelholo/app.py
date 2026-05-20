@@ -172,7 +172,8 @@ def main(enable_lipsync: bool = True, enable_timing: bool = False) -> None:
     if state.uploaded_voice_samples:
         try:
             print("🎤 Pre-caching TTS speaker conditionals...")
-            tts.prepare_conditionals(state.uploaded_voice_samples[0])
+            tts.prepare_conditionals(
+                state.uploaded_voice_samples[0], exaggeration=state.tts_exaggeration)
             state.voice_conditionals_ready = True
             print("✅ TTS conditionals cached")
         except Exception as exc:

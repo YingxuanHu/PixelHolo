@@ -252,7 +252,7 @@ def get_ollama_response(
         "model": OLLAMA_MODEL,
         "prompt": full_prompt,
         "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 196},
+        "options": {"temperature": 0.7, "num_predict": 512},
     }
     headers = {"Content-Type": "application/json"}
 
