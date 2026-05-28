@@ -7,7 +7,7 @@ Overview
 
 - Uses Chatterbox-TTS for voice cloning.
 - Uses the lipsync library for lipsyncing (in one version of the program). Note that this is not allowed to be used in commercial applications and thus a commercially-friendly alternative should  replace this in the future.
-- Uses Mediapipe's rembg to remove background from the video and its first frame to isolate the person of interest and place them on a black background.
+- Uses rembg to segment the person in each frame and composites them over a blurred copy of the original background.
 - Uses Ollama to implement Microsoft's Phi 4 LLM AI model to enable conversation.
 - Features a custom-trained ML model to determine if a prompt requires internet consultation. 
 - If a question requires internet consultation, then the program will provide some relevant search results as context to the AI model.
@@ -45,7 +45,7 @@ Info for running the program
 
 - After clicking the 'Generate' button, you can head back to the terminal to check the initialization process.
 
-- Once initialization is complete, a window will pop up, and if everything went right, it should display a static image of the person on a black background. The program replaces the background with black because when the monitor's screen is put near an acrylic sheet at an angle, the person will appear to float on the acrylic sheet, hence the promise of a 'holographic' avatar.
+- Once initialization is complete, a window will pop up, and if everything went right, it should display a static image of the person over a blurred background. When the monitor's screen is put near an acrylic sheet at an angle, the person can appear to float on the acrylic sheet, hence the promise of a 'holographic' avatar.
 
 - At this point, if the conference camera is connected, you should notice it tracking your face. If not, look at the initial debug messages printed in the terminal after you clicked 'Generate' to see what went wrong. The camera currently only serves the purpose of tracking the user's face, but you take it further by implementing something like the ability to differentiate between people if you like.
 

@@ -272,7 +272,14 @@ def create_app(state: AppState) -> Flask:
 
         body, code = _init_ml_stack(state)
         if code == 200:
-            body = {**body, "message": "Saved avatar loaded"}
+            body = {
+                **body,
+                "message": "Saved avatar loaded",
+                "saved_avatar": {
+                    "id": avatar_id,
+                    "name": meta.get("name") or avatar_id[:8],
+                },
+            }
         return jsonify(body), code
 
     @app.delete("/avatars/<avatar_id>")

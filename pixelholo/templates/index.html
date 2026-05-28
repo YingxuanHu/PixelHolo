@@ -278,7 +278,48 @@
             flex-wrap: wrap;
             align-items: center;
             gap: 10px;
+            margin-top: 24px;
             margin-bottom: 16px;
+        }
+
+        .avatar-persist-row .avatar-name-display {
+            display: none;
+            flex: 1;
+            min-width: 160px;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            background: #f7fafc;
+        }
+
+        .avatar-persist-row.is-saved-avatar input {
+            display: none;
+        }
+
+        .avatar-persist-row.is-saved-avatar .avatar-name-display {
+            display: flex;
+        }
+
+        .avatar-persist-row.is-saved-avatar #saveAvatarBtn {
+            display: none;
+        }
+
+        .avatar-name-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #718096;
+            white-space: nowrap;
+        }
+
+        .avatar-name-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #2d3748;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .avatar-persist-row input {
@@ -481,6 +522,58 @@
             color: #2d3748;
             white-space: pre-wrap;
             word-break: break-word;
+        }
+
+        .response-time-panel {
+            margin-bottom: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
+            padding: 14px 16px;
+        }
+
+        .response-time-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .response-time-hint {
+            font-size: 0.78rem;
+            color: #718096;
+            margin-bottom: 10px;
+            line-height: 1.35;
+        }
+
+        .response-time-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #667eea;
+            line-height: 1.2;
+        }
+
+        .response-time-value.is-waiting {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #a0aec0;
+        }
+
+        .response-time-value.is-error {
+            font-size: 0.95rem;
+            color: #e53e3e;
+        }
+
+        .response-time-status {
+            margin-top: 6px;
+            font-size: 0.75rem;
+            color: #a0aec0;
+            min-height: 1em;
+        }
+
+        .response-time-status.is-active {
+            color: #667eea;
         }
 
         .settings-hint {
@@ -942,7 +1035,11 @@
                         </div>
                     </details>
 
-                    <div class="avatar-persist-row">
+                    <div class="avatar-persist-row" id="avatarPersistRow">
+                        <div class="avatar-name-display" id="avatarNameDisplay" aria-live="polite">
+                            <span class="avatar-name-label">Current avatar</span>
+                            <span class="avatar-name-value" id="avatarNameValue"></span>
+                        </div>
                         <input type="text" id="saveAvatarNameInput" placeholder="Name this avatar to save…"
                             maxlength="120" autocomplete="off">
                         <button type="button" class="btn-secondary" id="saveAvatarBtn">Save avatar</button>
@@ -953,6 +1050,12 @@
                 </div>
 
                 <aside class="chat-sidebar">
+                    <div class="response-time-panel" id="responseTimePanel" aria-live="polite">
+                        <h3 class="response-time-title">Response time</h3>
+                        <p class="response-time-hint">From send to first chunk playing</p>
+                        <div class="response-time-value" id="responseTimeValue">—</div>
+                        <div class="response-time-status" id="responseTimeStatus"></div>
+                    </div>
                     <div class="avatar-settings-panel is-expanded" id="avatarSettings">
                         <button type="button" class="avatar-settings-toggle" id="avatarSettingsToggle"
                             aria-expanded="true" aria-controls="avatarSettingsDrawer"
@@ -1100,12 +1203,67 @@
         const chatError = document.getElementById('chatError');
         const savedAvatarsGrid = document.getElementById('savedAvatarsGrid');
         const savedAvatarsEmpty = document.getElementById('savedAvatarsEmpty');
+        const avatarPersistRow = document.getElementById('avatarPersistRow');
+        const avatarNameValue = document.getElementById('avatarNameValue');
         const saveAvatarNameInput = document.getElementById('saveAvatarNameInput');
         const saveAvatarBtn = document.getElementById('saveAvatarBtn');
         const saveAvatarStatus = document.getElementById('saveAvatarStatus');
+        let currentSavedAvatarId = null;
+        let currentSavedAvatarName = null;
         const resetAvatarSettingsBtn = document.getElementById('resetAvatarSettingsBtn');
         const transcriptBody = document.getElementById('transcriptBody');
         const transcriptEmpty = document.getElementById('transcriptEmpty');
+        const responseTimeValue = document.getElementById('responseTimeValue');
+        const responseTimeStatus = document.getElementById('responseTimeStatus');
+
+        let responseTimingActive = false;
+        let responseSendTimestamp = 0;
+
+        function formatResponseMs(ms) {
+            if (ms < 1000) {
+                return `${Math.round(ms)} ms`;
+            }
+            return `${(ms / 1000).toFixed(2)} s`;
+        }
+
+        function setResponseTimeIdle() {
+            responseTimingActive = false;
+            responseSendTimestamp = 0;
+            responseTimeValue.textContent = '—';
+            responseTimeValue.className = 'response-time-value';
+            responseTimeStatus.textContent = '';
+            responseTimeStatus.className = 'response-time-status';
+        }
+
+        function beginResponseTiming() {
+            responseTimingActive = true;
+            responseSendTimestamp = performance.now();
+            responseTimeValue.textContent = 'Measuring…';
+            responseTimeValue.className = 'response-time-value is-waiting';
+            responseTimeStatus.textContent = 'Waiting for first chunk';
+            responseTimeStatus.className = 'response-time-status is-active';
+        }
+
+        function recordFirstChunkPlaying() {
+            if (!responseTimingActive || !responseSendTimestamp) return;
+            const elapsed = performance.now() - responseSendTimestamp;
+            responseTimingActive = false;
+            responseTimeValue.textContent = formatResponseMs(elapsed);
+            responseTimeValue.className = 'response-time-value';
+            responseTimeStatus.textContent = 'Last measurement';
+            responseTimeStatus.className = 'response-time-status';
+            console.log(`Response time: ${formatResponseMs(elapsed)} (send → first chunk playing)`);
+        }
+
+        function cancelResponseTiming(message) {
+            if (!responseTimingActive) return;
+            responseTimingActive = false;
+            responseSendTimestamp = 0;
+            responseTimeValue.textContent = message || '—';
+            responseTimeValue.className = message ? 'response-time-value is-error' : 'response-time-value';
+            responseTimeStatus.textContent = message ? '' : '';
+            responseTimeStatus.className = 'response-time-status';
+        }
 
         function showState(state) {
             uploadState.style.display = state === 'upload' ? 'block' : 'none';
@@ -1117,9 +1275,32 @@
             currentState = state;
         }
 
+        function updateSaveAvatarUI() {
+            if (!avatarPersistRow) return;
+            const isSaved = Boolean(currentSavedAvatarId && currentSavedAvatarName);
+            avatarPersistRow.classList.toggle('is-saved-avatar', isSaved);
+            if (isSaved && avatarNameValue) {
+                avatarNameValue.textContent = currentSavedAvatarName;
+            }
+            if (!isSaved && saveAvatarNameInput) {
+                saveAvatarNameInput.value = '';
+            }
+        }
+
+        function setCurrentSavedAvatar(id, name) {
+            currentSavedAvatarId = id || null;
+            currentSavedAvatarName = (name || '').trim() || null;
+            updateSaveAvatarUI();
+        }
+
         function applySessionReady(data) {
             posterUrl = data.poster_url;
             videoPoster.src = posterUrl;
+            if (data.saved_avatar && data.saved_avatar.id) {
+                setCurrentSavedAvatar(data.saved_avatar.id, data.saved_avatar.name);
+            } else {
+                setCurrentSavedAvatar(null, null);
+            }
             if (data.stt_available === false) {
                 micBtn.disabled = true;
                 micBtn.title = data.stt_error
@@ -1508,6 +1689,9 @@
                     throw new Error(data.error || 'Delete failed');
                 }
                 await refreshSavedAvatars();
+                if (currentSavedAvatarId === avatarId) {
+                    setCurrentSavedAvatar(null, null);
+                }
             } catch (error) {
                 showError(uploadError, error.message || 'Failed to delete avatar.');
             }
@@ -1609,6 +1793,7 @@
                     throw new Error(data.error || 'Save failed');
                 }
                 saveAvatarStatus.textContent = 'Saved.';
+                setCurrentSavedAvatar(data.id, data.name || name);
                 await refreshSavedAvatars();
             } catch (error) {
                 saveAvatarStatus.textContent = error.message || 'Save failed.';
@@ -1705,7 +1890,7 @@
         }
 
         async function sendAudioToServer(audioBlob) {
-            // Clean up any previous question's state
+            beginResponseTiming();
             cleanupPreviousQuestion();
 
             // Disable input and show thinking indicator
@@ -1751,6 +1936,7 @@
                 sendBtn.disabled = false;
                 micBtn.disabled = false;
                 thinkingIndicator.classList.remove('active');
+                cancelResponseTiming('Failed');
             }
         }
 
@@ -1946,6 +2132,7 @@
             const showWhenPlaying = () => {
                 el.removeEventListener('playing', showWhenPlaying);
                 el.classList.add('is-front');
+                recordFirstChunkPlaying();
             };
             el.addEventListener('playing', showWhenPlaying);
 
@@ -2085,6 +2272,7 @@
                     sendBtn.disabled = false;
                     micBtn.disabled = false;
                     thinkingIndicator.classList.remove('active');
+                    cancelResponseTiming('Failed');
                 }
                 // status === 'WAIT' is just a keepalive ping; ignore.
             };
@@ -2127,7 +2315,7 @@
                 return;
             }
 
-            // Clean up any previous question's state
+            beginResponseTiming();
             cleanupPreviousQuestion();
 
             // Disable input and show thinking indicator
@@ -2164,6 +2352,7 @@
                 chatInput.disabled = false;
                 sendBtn.disabled = false;
                 thinkingIndicator.classList.remove('active');
+                cancelResponseTiming('Failed');
             }
         }
     </script>
