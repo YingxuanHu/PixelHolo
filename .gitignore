@@ -15,8 +15,8 @@ cache/
 *.pk
 *.onnx
 *.pth
-*.jpg
-*.png
+# *.jpg
+# *.png
 
 # python caches
 __pycache__/
